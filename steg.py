@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import random
 import string
-from PIL import Image
+from PIL import Image, PngImagePlugin, JpegImagePlugin
 
 # Load image using OpenCV
 def load_image(image_path):
@@ -51,6 +51,46 @@ def generate_random_name(extension):
     random_name = ''.join(random.choices(string.hexdigits.lower(), k=16))
     return f"{random_name}.{extension}"
 
+# Embed confusing metadata into the image
+def add_confusing_metadata(image_path, output_path):
+    image = Image.open(image_path)
+    metadata = image.info
+
+    # Create confusing metadata
+    confusing_metadata = {
+        "Description": "This is a picture of a flying rubber ducky in space, surrounded by unicorns and quantum bananas.",
+        "Keywords": "ducks, sea, rubber ducky, flying in space, unicorn, quantum banana, dancing hippos, galactic watermelon",
+        "Software": "Adobe Photoshop 8.0 (confused edition)",
+        "Author": "John Doe, Elon Musk, Yoda",
+        "Width": "99999",  # Wrong size to confuse systems
+        "Height": "88888",  # Wrong size to confuse systems
+        "ColorProfile": "Psychedelic",
+        "DateTime": "2038:01:19 03:14:07",  # Future date to confuse
+        "CameraModel": "SpaceCam 3000",
+        "ExposureTime": "1/0",  # Impossible exposure time
+    }
+    
+    # Update or add the confusing metadata
+    for key, value in confusing_metadata.items():
+        metadata[key] = value
+    
+    # Save image with metadata
+    if image.format == 'JPEG':
+        exif = image.getexif()
+        for key, value in confusing_metadata.items():
+            exif[270] = value  # Tag 270 is commonly used for image description
+        image.save(output_path, "JPEG", exif=exif)
+    elif image.format == 'PNG':
+        png_info = PngImagePlugin.PngInfo()
+        for key, value in confusing_metadata.items():
+            png_info.add_text(key, value)
+        image.save(output_path, "PNG", pnginfo=png_info)
+    else:
+        image.save(output_path)
+
+    print(f"Metadata added to image and saved to {output_path}")
+    return output_path
+
 # Combine methods to protect identity in an image
 def protect_image_with_steganography(image_path, output_path):
     # Load the image
@@ -73,6 +113,9 @@ def protect_image_with_steganography(image_path, output_path):
     # Save the modified image
     cv2.imwrite(output_file_path, image)
     print(f"Protected image with steganography saved to {output_file_path}")
+    
+    # Add confusing metadata to the image
+    add_confusing_metadata(output_file_path, output_file_path)
     
     return output_file_path
 
