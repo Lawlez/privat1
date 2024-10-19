@@ -1,9 +1,13 @@
+import os
 import cv2
 import numpy as np
-import os
 import random
 import string
 from PIL import Image
+from art.attacks.evasion import FastGradientMethod
+from art.estimators.classification import SklearnClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import make_classification
 
 # Load image using OpenCV
 def load_image(image_path):
@@ -12,11 +16,34 @@ def load_image(image_path):
         raise FileNotFoundError(f"Image at path {image_path} not found.")
     return image
 
+# Apply adversarial noise to the image using ART without TensorFlow
+def apply_adversarial_noise(image, epsilon=0.02):
+    # Resize image to the input shape for the model (224x224)
+    image_resized = cv2.resize(image, (224, 224))
+    image_resized = image_resized.astype(np.float32) / 255.0
+    image_resized = np.expand_dims(image_resized, axis=0)
+
+    # Create a simple scikit-learn model for demonstration purposes
+    X_train, y_train = make_classification(n_samples=100, n_features=224 * 224 * 3, n_classes=2, random_state=42)
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+    classifier = SklearnClassifier(model=model)
+
+    # Create the adversarial attack using Fast Gradient Method (FGM)
+    attack = FastGradientMethod(estimator=classifier, eps=epsilon)
+    adversarial_image = attack.generate(x=image_resized)
+
+    # Convert the image back to OpenCV format
+    adversarial_image = np.squeeze(adversarial_image) * 255.0
+    adversarial_image = adversarial_image.astype(np.uint8)
+
+    return adversarial_image
+
 # Apply pixel shift to distort image in a subtle but AI-confusing way
 def apply_pixel_shift(image, shift_amount=1):
     shifted_image = image.copy()
     h, w, c = shifted_image.shape
-    for y in range(0, h, 1):
+    for y in range(0, h, 2):
         for x in range(0, w, 2):
             if x + shift_amount < w and y + shift_amount < h:
                 shifted_image[y, x] = image[(y + shift_amount) % h, (x + shift_amount) % w]
@@ -33,7 +60,7 @@ def apply_pixel_pattern_mask(image, pattern_size=4):
     return masked_image
 
 # Modify compression to further distort image characteristics
-def apply_compression(image, quality=90):
+def apply_compression(image, quality=75):
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     result, encimg = cv2.imencode('.jpg', image, encode_param)
     compressed_image = cv2.imdecode(encimg, 1)
@@ -50,6 +77,7 @@ def protect_image(image_path, output_path):
     image = load_image(image_path)
     
     # Apply series of transformations
+    image = apply_adversarial_noise(image)
     image = apply_pixel_shift(image)
     image = apply_pixel_pattern_mask(image)
     image = apply_compression(image)
