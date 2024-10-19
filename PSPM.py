@@ -16,8 +16,8 @@ def load_image(image_path):
         raise FileNotFoundError(f"Image at path {image_path} not found.")
     return image
 
-# Apply adversarial noise to the image using ART
-def apply_adversarial_noise(image, epsilon=0.0035):
+# Apply adversarial noise to the image using ART without TensorFlow
+def apply_adversarial_noise(image, epsilon=0.0035):  # Lowered epsilon to reduce visibility of noise
     # Flatten the image to 2D for the model
     h, w, c = image.shape
     image_flattened = image.astype(np.float32).reshape(1, -1) / 255.0
@@ -36,10 +36,13 @@ def apply_adversarial_noise(image, epsilon=0.0035):
     adversarial_image = adversarial_image_flattened.reshape(h, w, c) * 255.0
     adversarial_image = adversarial_image.astype(np.uint8)
 
+    # Apply slight Gaussian blur to reduce visible noise artifacts
+    adversarial_image = cv2.GaussianBlur(adversarial_image, (3, 3), 0)
+
     return adversarial_image
 
 # Apply pixel shift to distort image in a subtle but AI-confusing way
-def apply_pixel_shift(image, shift_amount=4):
+def apply_pixel_shift(image, shift_amount=2):
     shifted_image = image.copy()
     h, w, c = shifted_image.shape
     for y in range(0, h, 2):
@@ -49,13 +52,15 @@ def apply_pixel_shift(image, shift_amount=4):
     return shifted_image
 
 # Apply a pixel pattern mask to subtly alter pixel values
-def apply_pixel_pattern_mask(image, pattern_size=4):
+def apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.2):
     masked_image = image.copy()
     h, w, c = masked_image.shape
-    pattern = np.random.randint(0, 2, (pattern_size, pattern_size, c), dtype='uint8') * 20
+    pattern = (np.random.randint(0, 2, (pattern_size, pattern_size, c), dtype='uint8') * 50).astype(np.float32)
     for y in range(0, h, pattern_size):
         for x in range(0, w, pattern_size):
-            masked_image[y:y+pattern_size, x:x+pattern_size] = cv2.add(masked_image[y:y+pattern_size, x:x+pattern_size], pattern[:min(h-y, pattern_size), :min(w-x, pattern_size)])
+            region = masked_image[y:y+pattern_size, x:x+pattern_size].astype(np.float32)
+            blended_region = cv2.addWeighted(region, 1 - opacity, pattern[:min(h-y, pattern_size), :min(w-x, pattern_size)], opacity, 0)
+            masked_image[y:y+pattern_size, x:x+pattern_size] = blended_region.astype(np.uint8)
     return masked_image
 
 # Modify compression to further distort image characteristics
