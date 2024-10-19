@@ -18,23 +18,22 @@ def load_image(image_path):
 
 # Apply adversarial noise to the image using ART without TensorFlow
 def apply_adversarial_noise(image, epsilon=0.02):
-    # Resize image to the input shape for the model (224x224)
-    image_resized = cv2.resize(image, (224, 224))
-    image_resized = image_resized.astype(np.float32) / 255.0
-    image_resized = np.expand_dims(image_resized, axis=0)
+    # Flatten the image to 2D for the model
+    h, w, c = image.shape
+    image_flattened = image.astype(np.float32).reshape(1, -1) / 255.0
 
     # Create a simple scikit-learn model for demonstration purposes
-    X_train, y_train = make_classification(n_samples=100, n_features=224 * 224 * 3, n_classes=2, random_state=42)
+    X_train, y_train = make_classification(n_samples=100, n_features=h * w * c, n_classes=2, random_state=42)
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
     classifier = SklearnClassifier(model=model)
 
     # Create the adversarial attack using Fast Gradient Method (FGM)
     attack = FastGradientMethod(estimator=classifier, eps=epsilon)
-    adversarial_image = attack.generate(x=image_resized)
+    adversarial_image_flattened = attack.generate(x=image_flattened)
 
-    # Convert the image back to OpenCV format
-    adversarial_image = np.squeeze(adversarial_image) * 255.0
+    # Reshape the adversarial image back to its original shape
+    adversarial_image = adversarial_image_flattened.reshape(h, w, c) * 255.0
     adversarial_image = adversarial_image.astype(np.uint8)
 
     return adversarial_image
