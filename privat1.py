@@ -63,6 +63,37 @@ def apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.2):
             masked_image[y:y+pattern_size, x:x+pattern_size] = blended_region.astype(np.uint8)
     return masked_image
 
+# Apply Gaussian Blur to distort facial features
+def apply_blur(image, kernel_size=(1, 3)):
+    return cv2.GaussianBlur(image, kernel_size, 0)
+
+# Add random noise to the image to confuse recognition models
+def apply_noise(image, noise_level=10):
+    noisy_image = image.copy()
+    h, w, c = noisy_image.shape
+    noise = np.random.randint(-noise_level, noise_level, (h, w, c), dtype='int16')
+    noisy_image = cv2.add(noisy_image, noise, dtype=cv2.CV_8U)
+    return noisy_image
+
+# Apply a pixelation effect
+def apply_pixelation(image, pixel_size=2):
+    height, width = image.shape[:2]
+    temp = cv2.resize(image, (width // pixel_size, height // pixel_size), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
+
+# Modify compression to further distort image characteristics
+def apply_compression(image, quality=85):
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+    result, encimg = cv2.imencode('.jpg', image, encode_param)
+    compressed_image = cv2.imdecode(encimg, 1)
+    return compressed_image
+
+# Generate a random 8-byte hexadecimal name
+def generate_random_name(extension):
+    random_name = ''.join(random.choices(string.hexdigits.lower(), k=16))
+    return f"{random_name}.{extension}"
+
+
 # Steganography to embed nonsensical keywords into the image and add confusing metadata
 def embed_keywords_and_metadata(image, keywords, metadata):
     # Flatten the keywords into a single string
