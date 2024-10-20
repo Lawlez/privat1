@@ -24,7 +24,7 @@ def apply_adversarial_noise(image, epsilon=0.0045):  # Lower epsilon to reduce v
     image_flattened = image.astype(np.float32).reshape(1, -1) / 255.0
 
     # Create a simple scikit-learn model for demonstration purposes
-    X_train, y_train = make_classification(n_samples=100, n_features=h * w * c, n_classes=2, random_state=42)
+    X_train, y_train = make_classification(n_samples=150, n_features=h * w * c, n_classes=2, random_state=42)
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
     classifier = SklearnClassifier(model=model)
@@ -36,7 +36,7 @@ def apply_adversarial_noise(image, epsilon=0.0045):  # Lower epsilon to reduce v
     # Reshape the adversarial image back to its original shape
     adversarial_image = adversarial_image_flattened.reshape(h, w, c) * 255.0
     adversarial_image = adversarial_image.astype(np.uint8)
-    adversarial_image = cv2.GaussianBlur(adversarial_image, (3, 3), 0)
+    #adversarial_image = cv2.GaussianBlur(adversarial_image, (3, 3), 0)
 
     return adversarial_image
 
@@ -59,7 +59,7 @@ def apply_CL2_adversarial_noise(image):
     adversarial_image = adversarial_image_flattened.reshape(h, w, c) * 255.0
     adversarial_image = adversarial_image.astype(np.uint8)
     
-    adversarial_image = cv2.GaussianBlur(adversarial_image, (3, 3), 0)
+    #adversarial_image = cv2.GaussianBlur(adversarial_image, (3, 3), 0)
 
     return adversarial_image
 
@@ -108,7 +108,7 @@ def apply_pixelation(image, pixel_size=2):
     temp = cv2.resize(image, (width // pixel_size, height // pixel_size), interpolation=cv2.INTER_LINEAR)
     return cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
 
-# Modify compression to further distort image characteristics
+# Modify compression to distort image characteristics
 def apply_compression(image, quality=85):
     print("applying compression.")
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
@@ -131,13 +131,8 @@ def remove_metadata(image_path, output_path):
 
 def embed_keywords_and_metadata(image, keywords, metadata):
     print("changing metadata.")
-    # Flatten the keywords into a single string
     keyword_string = ','.join(keywords)
-    
-    # Convert the string to binary representation
     binary_string = ''.join(format(ord(char), '08b') for char in keyword_string)
-    
-    # Get image dimensions
     h, w, c = image.shape
     
     # Create a copy of the image to embed the data
@@ -161,11 +156,10 @@ def embed_keywords_and_metadata(image, keywords, metadata):
         if idx >= len(binary_string):
             break
     
-    # Convert OpenCV image to PIL format to add metadata
     pil_image = Image.fromarray(cv2.cvtColor(stego_image, cv2.COLOR_BGR2RGB))
     png_info = PngImagePlugin.PngInfo()
     
-    # Add confusing metadata
+    # Add new metadata
     for key, value in metadata.items():
         png_info.add_text(key, value)
     
@@ -177,25 +171,26 @@ def embed_keywords_and_metadata(image, keywords, metadata):
     return output_path
 
 def embed_resized_images(original_image, assets_path):
+    print("adding training data images.")
     h, w, c = original_image.shape
     resized_images = []
 
-    # Load and resize all images in the assets path to 12x12px
+    # Load and resize all images in the assets path to 28x28px
     for file_name in os.listdir(assets_path):
         image_path = os.path.join(assets_path, file_name)
         if os.path.isfile(image_path) and file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
             asset_image = load_image(image_path)
-            resized_image = cv2.resize(asset_image, (12, 12))
+            resized_image = cv2.resize(asset_image, (28, 28))
             resized_images.append(resized_image)
 
     for resized_image in resized_images:
-        for _ in range(5):
+        for _ in range(9):
             # Randomly select position
-            y_offset = random.randint(0, h - 12)
-            x_offset = random.randint(0, w - 12)
+            y_offset = random.randint(0, h - 28)
+            x_offset = random.randint(0, w - 28)
 
             # Extract the region of interest (ROI) from the original image
-            roi = original_image[y_offset:y_offset + 12, x_offset:x_offset + 12]
+            roi = original_image[y_offset:y_offset + 28, x_offset:x_offset + 28]
 
             # Convert resized image and ROI to float for blending
             resized_image_float = resized_image.astype(np.float32) / 255.0
@@ -203,11 +198,11 @@ def embed_resized_images(original_image, assets_path):
 
             # Apply screen blending mode
             blended_region = 1 - (1 - roi_float) * (1 - resized_image_float)
-            blended_region = (blended_region * 0.5 + roi_float * 0.5)  # Apply 50% opacity
+            blended_region = (blended_region * 0.5 + roi_float * 0.4)  # Apply 40% opacity
             blended_region = np.clip(blended_region * 255.0, 0, 255).astype(np.uint8)
 
             # Place the blended region back into the original image
-            original_image[y_offset:y_offset + 12, x_offset:x_offset + 12] = blended_region
+            original_image[y_offset:y_offset + 28, x_offset:x_offset + 28] = blended_region
 
     return original_image
 
@@ -217,15 +212,15 @@ def protect_image(image_path, output_path):
     image = load_image(image_path)
     
     # Apply series of transformations
-    image = apply_adversarial_noise(image)
+    image = apply_blur(image)
     image = apply_pixel_shift(image)
     image = apply_pixel_pattern_mask(image)
     image = apply_compression(image)
-    image = apply_blur(image)
     image = apply_noise(image)
     image = apply_pixelation(image)
+    image = apply_adversarial_noise(image)
     image = apply_CL2_adversarial_noise(image)
-    image = embed_resized_images(image)
+    image = embed_resized_images(image, "./assets")
     
     # Keywords and metadata for steganography
     keywords = ["ducks", "sea", "rubber ducky", "flying in space", "unicorn", "quantum banana"]
