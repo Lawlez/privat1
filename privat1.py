@@ -17,7 +17,7 @@ def load_image(image_path):
     return image
 
 # Apply adversarial noise to the image using ART without TensorFlow
-def apply_adversarial_noise(image, epsilon=0.0045):  # Lower epsilon to reduce visibility
+def apply_adversarial_noise(image, epsilon=0.0245):  # Lower epsilon to reduce visibility
     print("applying FGM adversarial noise.")
     # Flatten the image to 2D for the model
     h, w, c = image.shape
@@ -52,7 +52,7 @@ def apply_CL2_adversarial_noise(image):
     classifier = SklearnClassifier(model=model)
 
     # Create the adversarial attack using Carlini & Wagner's L2 Method
-    attack = CarliniL2Method(classifier=classifier, confidence=0.5, max_iter=10)
+    attack = CarliniL2Method(classifier=classifier, confidence=0.5, max_iter=12)
     adversarial_image_flattened = attack.generate(x=image_flattened)
 
     # Reshape the adversarial image back to its original shape
@@ -64,7 +64,7 @@ def apply_CL2_adversarial_noise(image):
     return adversarial_image
 
 # Apply pixel shift to distort image in a subtle but AI-confusing way
-def apply_pixel_shift(image, shift_amount=4):
+def apply_pixel_shift(image, shift_amount=8):
     print("applying Pixel Shift.")
     shifted_image = image.copy()
     h, w, c = shifted_image.shape
@@ -75,7 +75,7 @@ def apply_pixel_shift(image, shift_amount=4):
     return shifted_image
 
 # Apply a pixel pattern mask to subtly alter pixel values
-def apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.2):
+def apply_pixel_pattern_mask(image, pattern_size=5, opacity=0.2):
     print("applying Pixel Pattern Mask.")
     masked_image = image.copy()
     h, w, c = masked_image.shape
