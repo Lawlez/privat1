@@ -36,6 +36,8 @@ def jsma_attack(model, x, target, patch_size=100, theta=1.0, gamma=0.2, max_iter
                 y_pred = model(x_var)
                 loss = tf.nn.softmax_cross_entropy_with_logits(labels=target, logits=y_pred)
             gradients = tape.gradient(loss, patch)
+            if gradients is None:
+                continue
             
             # Perform the iterative attack on the patch
             for _ in range(min(max_iterations, int(gamma * np.prod(patch.shape)))):
@@ -43,7 +45,7 @@ def jsma_attack(model, x, target, patch_size=100, theta=1.0, gamma=0.2, max_iter
                 
                 # Calculate Jacobian Saliency Map
                 # Pick the pixel with the highest gradient to modify
-                indices = np.unravel_index(np.argmax(grad_values), grad_values.shape)
+                indices = np.unravel_index(np.argmax(grad_values.numpy()), grad_values.shape)
                 patch = tf.tensor_scatter_nd_add(patch, [indices], [perturbation_step * theta])
                 patch = tf.clip_by_value(patch, 0, 1)
             
