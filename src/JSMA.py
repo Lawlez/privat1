@@ -3,13 +3,14 @@ import tensorflow as tf
 from PIL import Image
 import cv2
 
-def preprocess_image(image_path, target_size=(300, 300)):
+def preprocess_image(image_path, target_size=None):
     # Load the image using OpenCV
     img = cv2.imread(image_path)
     if img is None:
         raise FileNotFoundError(f"Image at path '{image_path}' not found. Please check the file path.")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
-    img = cv2.resize(img, target_size)  # Resize to the specified input size for the model
+    if target_size:
+        img = cv2.resize(img, target_size)  # Resize to the specified input size for the model
     return img
 
 def image_to_array(image):
@@ -17,35 +18,44 @@ def image_to_array(image):
     img_array = np.asarray(image).astype(np.float32) / 255.0
     return np.expand_dims(img_array, axis=0)
 
-def jsma_attack(model, x, target, theta=1.0, gamma=0.2, max_iterations=500, perturbation_step=0.01):
-    
-    
+def jsma_attack(model, x, target, patch_size=100, theta=1.0, gamma=0.2, max_iterations=500, perturbation_step=0.01):
     x_var = tf.convert_to_tensor(x, dtype=tf.float32)
     target = tf.constant(target, dtype=tf.float32)
     
-    # Calculate gradients
-    with tf.GradientTape() as tape:
-        tape.watch(x_var)
-        y_pred = model(x_var)
-        loss = tf.nn.softmax_cross_entropy_with_logits(labels=target, logits=y_pred)
-    gradients = tape.gradient(loss, x_var)
+    # Calculate gradients within patches
+    height, width, _ = x.shape[1:]
+    for y in range(0, height, patch_size):
+        for x in range(0, width, patch_size):
+            x_end = min(x + patch_size, width)
+            y_end = min(y + patch_size, height)
+            patch = x_var[:, y:y_end, x:x_end, :]
+            
+            # Calculate gradients for the patch
+            with tf.GradientTape() as tape:
+                tape.watch(patch)
+                y_pred = model(x_var)
+                loss = tf.nn.softmax_cross_entropy_with_logits(labels=target, logits=y_pred)
+            gradients = tape.gradient(loss, patch)
+            
+            # Perform the iterative attack on the patch
+            for _ in range(min(max_iterations, int(gamma * np.prod(patch.shape)))):
+                grad_values = gradients
+                
+                # Calculate Jacobian Saliency Map
+                # Pick the pixel with the highest gradient to modify
+                indices = np.unravel_index(np.argmax(grad_values), grad_values.shape)
+                patch = tf.tensor_scatter_nd_add(patch, [indices], [perturbation_step * theta])
+                patch = tf.clip_by_value(patch, 0, 1)
+            
+            # Update the original image with the modified patch
+            x_var = tf.tensor_scatter_nd_update(x_var, [[0, y, x, 0]], patch)
     
-    # Perform the iterative attack
-    for _ in range(min(max_iterations, int(gamma * np.prod(x.shape)))):
-        grad_values = gradients
-        
-        # Calculate Jacobian Saliency Map
-        # Pick the pixel with the highest gradient to modify
-        indices = np.unravel_index(np.argmax(grad_values), grad_values.shape)
-        x = tf.tensor_scatter_nd_add(x_var, [indices], [perturbation_step * theta])
-        x = tf.clip_by_value(x, 0, 1)
-        
-    return x
+    return x_var
   
 
 def main(image_path, model):
     # Preprocess the image
-    original_image = preprocess_image(image_path, target_size=(300, 300))
+    original_image = preprocess_image(image_path)
     
     # Convert the image to a numpy array
     input_array = image_to_array(original_image)
@@ -54,8 +64,8 @@ def main(image_path, model):
     target_class = np.zeros((1, 1000))  # Adjust target class size to match the model's output
     target_class[0, 3] = 1  # Let's assume we want to target class 3
     
-    # Run the JSMA
-    adversarial_image = jsma_attack(model, input_array, target_class, theta=1.5, gamma=0.3, max_iterations=1000, perturbation_step=0.02)
+    # Run the JSMA with patch-based attack
+    adversarial_image = jsma_attack(model, input_array, target_class, patch_size=150, theta=1.5, gamma=0.3, max_iterations=500, perturbation_step=0.02)
     
     # Convert the adversarial image back to a format suitable for saving/display
     adversarial_image = tf.squeeze(adversarial_image) * 255
@@ -66,7 +76,7 @@ def main(image_path, model):
 
 if __name__ == "__main__":
     # Load a pre-trained model (for example, MobileNetV2 from TensorFlow)
-    model = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(300, 300, 3))
+    model = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(None, None, 3))
     model = tf.keras.Sequential([
         model,
         tf.keras.layers.GlobalAveragePooling2D(),
