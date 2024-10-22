@@ -6,6 +6,8 @@ import cv2
 def preprocess_image(image_path, target_size=(300, 300)):
     # Load the image using OpenCV
     img = cv2.imread(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Image at path '{image_path}' not found. Please check the file path.")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
     img = cv2.resize(img, target_size)  # Resize to the specified input size for the model
     return img
@@ -39,6 +41,7 @@ def jsma_attack(model, x, target, theta=1.0, gamma=0.2, max_iterations=500, pert
         x = tf.clip_by_value(x, 0, 1)
         
     return x
+  
 
 def main(image_path, model):
     # Preprocess the image
@@ -55,8 +58,8 @@ def main(image_path, model):
     adversarial_image = jsma_attack(model, input_array, target_class, theta=1.5, gamma=0.3, max_iterations=1000, perturbation_step=0.02)
     
     # Convert the adversarial image back to a format suitable for saving/display
-    adversarial_image = adversarial_image.squeeze() * 255
-    adversarial_image = adversarial_image.astype(np.uint8)
+    adversarial_image = tf.squeeze(adversarial_image) * 255
+    adversarial_image = tf.cast(adversarial_image, tf.uint8).numpy()
     adversarial_pil = Image.fromarray(adversarial_image)
     adversarial_pil.save("adversarial_example.png")
     adversarial_pil.show()
