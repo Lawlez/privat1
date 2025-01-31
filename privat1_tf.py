@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Obfuscate images so that OCR, AI detection, edge detection, etc. struggle.
-# Because, you know, Globi’s machines ain't gotta read everything.
 
 import os
 import cv2
@@ -9,12 +7,13 @@ import random
 import string
 from PIL import Image, PngImagePlugin
 
-# We keep ART for the adversarial methods, but note: you’ll want to
-# configure ART for PyTorch or TensorFlow if you need a real classifier.
+# ART imports for adversarial attacks
 from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
-from art.estimators.classification import SklearnClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.datasets import make_classification
+from art.estimators.classification import TensorFlowV2Classifier
+
+# Minimal TF includes
+#import tensorflow as tf
+from tensorflow.keras import layers, models, losses
 
 ############################################
 #               HELPER FUNCS               #
@@ -33,9 +32,7 @@ def generate_random_name(extension):
     return f"{random_name}.{extension}"
 
 def remove_metadata(image_path, output_path):
-    """
-    Strips metadata by re-saving raw pixel data with default PIL settings.
-    """
+    """Strips metadata by re-saving pixel data with default PIL settings."""
     image = Image.open(image_path)
     data = list(image.getdata())
     image_no_metadata = Image.new(image.mode, image.size)
@@ -44,38 +41,47 @@ def remove_metadata(image_path, output_path):
     print(f"Metadata removed and saved to {output_path}")
 
 ############################################
+#       TENSORFLOW CLASSIFIER SETUP        #
+############################################
+
+def create_tf_classifier(h, w, c, num_classes=2, epochs=2):
+    model = models.Sequential([
+        layers.Input(shape=(h, w, c)),
+        layers.Flatten(),
+        layers.Dense(32, activation='relu'),
+        layers.Dense(num_classes, activation='softmax')
+    ])
+    # Use an actual loss object, not just a string
+    loss_fn = losses.SparseCategoricalCrossentropy(from_logits=False)
+    model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
+
+    # Some random tiny data to "train"
+    X_train = np.random.rand(50, h, w, c).astype(np.float32)
+    y_train = np.random.randint(0, num_classes, size=(50,))
+
+    model.fit(X_train, y_train, epochs=epochs, batch_size=10, verbose=0)
+
+    # Here's the key: pass the same loss function object to ART
+    art_classifier = TensorFlowV2Classifier(
+        model=model,
+        nb_classes=num_classes,
+        input_shape=(h, w, c),
+        loss_object=loss_fn
+    )
+    return art_classifier
+
+############################################
 #       ADVERSARIAL ATTACK FUNCTIONS       #
 ############################################
 
-def create_sklearn_classifier(h, w, c, samples=200):
-    """
-    Create a dummy scikit-learn model for demonstration of ART’s attacks.
-    Not super robust, but fine as a placeholder. We avoid big frameworks 
-    to keep it simpler (though ironically we are using scikit + art).
-    """
-    X_train, y_train = make_classification(
-        n_samples=samples,
-        n_features=h * w * c,
-        n_classes=2,
-        random_state=42
-    )
-    model = LogisticRegression(max_iter=1500)
-    model.fit(X_train, y_train)
-    return SklearnClassifier(model=model)
-
 def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
-    """
-    Stronger iterative (PGD) adversarial attack. 
-    Will degrade more, but also hopefully break AI detection more thoroughly.
-    """
-    print("Applying PGD Adversarial Noise.")
+    print("Applying PGD Adversarial Noise (TensorFlow).")
     h, w, c = image.shape
-    # Flatten for the scikit model
-    image_float = image.astype(np.float32).reshape(1, -1) / 255.0
+    # ART expects (N, H, W, C) in [0,1]
+    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
 
-    classifier = create_sklearn_classifier(h, w, c)
+    classifier = create_tf_classifier(h, w, c)
 
-    # PGD attack from ART
     attack = ProjectedGradientDescent(
         estimator=classifier,
         eps=eps,
@@ -83,51 +89,50 @@ def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
         max_iter=max_iter,
         targeted=False
     )
-    adv_flat = attack.generate(x=image_float)
-    
-    # Reshape back
-    adv_img = adv_flat.reshape(h, w, c) * 255.0
-    return np.clip(adv_img, 0, 255).astype(np.uint8)
+    x_adv = attack.generate(x_input)
+
+    # Rescale back to [0,255]
+    x_adv = x_adv * 255.0
+    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
+    return x_adv.reshape(h, w, c)
 
 def apply_fgm_adversarial_noise(image, epsilon=0.04):
-    """
-    Classic single-step FGM/FGSM. 
-    We jacked up epsilon a bit for more robust obfuscation.
-    """
-    print("Applying FGM Adversarial Noise.")
+    print("Applying FGM Adversarial Noise (TensorFlow).")
     h, w, c = image.shape
-    image_float = image.astype(np.float32).reshape(1, -1) / 255.0
+    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
 
-    classifier = create_sklearn_classifier(h, w, c)
+    classifier = create_tf_classifier(h, w, c)
 
     attack = FastGradientMethod(estimator=classifier, eps=epsilon)
-    adv_flat = attack.generate(x=image_float)
+    x_adv = attack.generate(x_input)
 
-    adv_img = adv_flat.reshape(h, w, c) * 255.0
-    return np.clip(adv_img, 0, 255).astype(np.uint8)
+    x_adv = x_adv * 255.0
+    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
+    return x_adv.reshape(h, w, c)
 
 def apply_carlini_l2_noise(image, confidence=1.0, max_iter=20):
-    """
-    Carlini & Wagner L2 with higher confidence & iteration for heavier distortion.
-    """
-    print("Applying Carlini-L2 Noise.")
+    print("Applying Carlini-L2 Noise (TensorFlow).")
     h, w, c = image.shape
-    image_float = image.astype(np.float32).reshape(1, -1) / 255.0
+    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
 
-    classifier = create_sklearn_classifier(h, w, c)
+    classifier = create_tf_classifier(h, w, c)
 
-    attack = CarliniL2Method(classifier=classifier, confidence=confidence, max_iter=max_iter)
-    adv_flat = attack.generate(x=image_float)
+    attack = CarliniL2Method(
+        classifier=classifier,
+        confidence=confidence,
+        max_iter=max_iter
+    )
+    x_adv = attack.generate(x_input)
 
-    adv_img = adv_flat.reshape(h, w, c) * 255.0
-    return np.clip(adv_img, 0, 255).astype(np.uint8)
+    x_adv = x_adv * 255.0
+    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
+    return x_adv.reshape(h, w, c)
 
 ############################################
 #         IMAGE DISTORTION METHODS         #
 ############################################
 
 def apply_pixel_shift(image, shift_amount=8):
-    """Shifts pixels around in small patches to confuse CNNs and edge detectors."""
     print("Applying Pixel Shift.")
     shifted_image = image.copy()
     h, w, c = shifted_image.shape
@@ -138,7 +143,6 @@ def apply_pixel_shift(image, shift_amount=8):
     return shifted_image
 
 def apply_pixel_pattern_mask(image, pattern_size=5, opacity=0.25):
-    """Applies random pattern overlays."""
     print("Applying Pixel Pattern Mask.")
     masked_image = image.copy()
     h, w, c = masked_image.shape
@@ -146,18 +150,15 @@ def apply_pixel_pattern_mask(image, pattern_size=5, opacity=0.25):
     for y in range(0, h, pattern_size):
         for x in range(0, w, pattern_size):
             region = masked_image[y:y+pattern_size, x:x+pattern_size].astype(np.float32)
-            blend = cv2.addWeighted(region, 1 - opacity,
-                                    pattern[:min(h-y, pattern_size), :min(w-x, pattern_size)], opacity, 0)
+            blend = cv2.addWeighted(region, 1 - opacity, pattern[:region.shape[0], :region.shape[1]], opacity, 0)
             masked_image[y:y+pattern_size, x:x+pattern_size] = blend.astype(np.uint8)
     return masked_image
 
 def apply_blur(image, kernel_size=(3, 3)):
-    """Slight blur to mess with face recognition systems."""
     print("Applying Blur.")
     return cv2.GaussianBlur(image, kernel_size, 0)
 
 def apply_noise(image, noise_level=20):
-    """Adds random uniform noise to each pixel to confuse OCR and detection."""
     print("Applying Random Noise.")
     noisy_image = image.copy()
     h, w, c = noisy_image.shape
@@ -166,14 +167,12 @@ def apply_noise(image, noise_level=20):
     return noisy_image
 
 def apply_pixelation(image, pixel_size=4):
-    """Pixelates the image to reduce detail."""
     print("Applying Pixelation.")
     height, width = image.shape[:2]
     temp = cv2.resize(image, (width // pixel_size, height // pixel_size), interpolation=cv2.INTER_LINEAR)
     return cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
 
 def apply_compression(image, quality=75):
-    """JPEG compression artifacts can disrupt AI-based detection."""
     print("Applying JPEG compression.")
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     result, encimg = cv2.imencode('.jpg', image, encode_param)
@@ -181,18 +180,16 @@ def apply_compression(image, quality=75):
     return compressed_image
 
 def apply_random_perspective_transform(image):
-    """
-    Random perspective warp to shift corners. 
-    This often breaks bounding-box and edge-based detection further.
-    """
     print("Applying Random Perspective Transform.")
     h, w = image.shape[:2]
-    # Randomly perturb corners within a small range
     margin = 0.08
     pts1 = np.float32([[0,0], [w,0], [0,h], [w,h]])
+
     def rand_pt(x, y):
-        return [x + random.randint(-int(w*margin), int(w*margin)),
-                y + random.randint(-int(h*margin), int(h*margin))]
+        return [
+            x + random.randint(-int(w*margin), int(w*margin)),
+            y + random.randint(-int(h*margin), int(h*margin))
+        ]
 
     pts2 = np.float32([rand_pt(0,0),
                        rand_pt(w,0),
@@ -207,10 +204,6 @@ def apply_random_perspective_transform(image):
 ############################################
 
 def embed_keywords_and_metadata(image, keywords, metadata):
-    """
-    Steganographically embed keywords’ bits into pixel LSB. 
-    Then store bogus metadata in PNG info.
-    """
     print("Embedding stego keywords & changing metadata.")
     keyword_string = ','.join(keywords)
     binary_string = ''.join(format(ord(char), '08b') for char in keyword_string)
@@ -225,6 +218,7 @@ def embed_keywords_and_metadata(image, keywords, metadata):
             for channel in range(c):
                 if idx < len(binary_string):
                     pixel_value = stego_image[y, x, channel]
+                    # Safe bit-twiddle for uint8
                     pixel_value = (pixel_value & 0xFE) | int(binary_string[idx])
                     stego_image[y, x, channel] = pixel_value
                     idx += 1
@@ -238,7 +232,6 @@ def embed_keywords_and_metadata(image, keywords, metadata):
     pil_image = Image.fromarray(cv2.cvtColor(stego_image, cv2.COLOR_BGR2RGB))
     png_info = PngImagePlugin.PngInfo()
 
-    # Add nonsense metadata
     for key, value in metadata.items():
         png_info.add_text(key, value)
 
@@ -248,11 +241,6 @@ def embed_keywords_and_metadata(image, keywords, metadata):
     return out_path
 
 def embed_resized_images(original_image, assets_path):
-    """
-    Loads tiny images from an 'assets' folder, 
-    resizes them to 28x28, and subtly blends them in random spots.
-    This can further confuse vision algorithms.
-    """
     print("Embedding small training images in random regions.")
     h, w, c = original_image.shape
     resized_images = []
@@ -265,7 +253,6 @@ def embed_resized_images(original_image, assets_path):
             resized_image = cv2.resize(asset_image, (28, 28))
             resized_images.append(resized_image)
 
-    # Blend each image multiple times
     for resized_image in resized_images:
         for _ in range(9):
             y_offset = random.randint(0, h - 28)
@@ -289,9 +276,7 @@ def embed_resized_images(original_image, assets_path):
 ############################################
 
 def protect_image(image_path, output_path):
-    """
-    Chained transformations + metadata confusion + stego.
-    """
+    """Chained transformations + metadata confusion + stego + TF-based adversarial attacks."""
     image = load_image(image_path)
 
     # Distort the image in multiple ways
@@ -303,7 +288,7 @@ def protect_image(image_path, output_path):
     image = apply_pixelation(image, pixel_size=3)
     image = apply_compression(image, quality=70)
 
-    # Multi-step adversarial approach
+    # Multi-step adversarial approach (now all TensorFlow-based)
     image = apply_pgd_adversarial_noise(image, eps=0.08, eps_step=0.02, max_iter=5)
     image = apply_fgm_adversarial_noise(image, epsilon=0.03)
     image = apply_carlini_l2_noise(image, confidence=1.5, max_iter=15)
@@ -323,13 +308,13 @@ def protect_image(image_path, output_path):
         "ColorProfile": "Psychedelic Dream Sequence",
         "DateTime": "4:20:13:37 07:07:07",
         "CameraModel": "SpaceCam 9001",
-        "ExposureTime": "1/∞",  # Because physics
+        "ExposureTime": "1/∞",
     }
     embed_keywords_and_metadata(image, keywords, confusing_metadata)
 
     # Save final obfuscated image
     _, ext = os.path.splitext(image_path)
-    ext = ext[1:]  # remove leading '.'
+    ext = ext[1:]  # remove the dot
     output_file_name = generate_random_name(ext)
     output_file_path = os.path.join(output_path, output_file_name)
     cv2.imwrite(output_file_path, image)
@@ -353,6 +338,7 @@ if __name__ == "__main__":
         if (os.path.isfile(input_image_path) and 
             file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff'))):
             protected_image_path = protect_image(input_image_path, output_folder)
+
             # Remove metadata from final product
             meta_removed_path = os.path.join(
                 output_folder, f"no_metadata_{os.path.basename(protected_image_path)}"
