@@ -7,15 +7,14 @@ import random
 import string
 from PIL import Image, PngImagePlugin
 
-# ART imports for adversarial attacks
+# ART imports
 from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
 from art.estimators.classification import TensorFlowV2Classifier
 
-from tensorflow.keras import layers, models, losses
+import tensorflow as tf
+import tensorflow_hub as hub
+from tensorflow.keras import losses
 
-############################################
-#               HELPER FUNCS               #
-############################################
 
 def load_image(image_path):
     """Loads image via OpenCV."""
@@ -39,47 +38,53 @@ def remove_metadata(image_path, output_path):
     print(f"Metadata removed and saved to {output_path}")
 
 ############################################
-#       TENSORFLOW CLASSIFIER SETUP        #
+#       PRE-TRAINED MODEL SETUP (TF HUB)   #
 ############################################
 
-def create_tf_classifier(h, w, c, num_classes=2, epochs=2):
-    model = models.Sequential([
-        layers.Input(shape=(h, w, c)),
-        layers.Flatten(),
-        layers.Dense(32, activation='relu'),
-        layers.Dense(num_classes, activation='softmax')
-    ])
-    # Use an actual loss object, not just a string
-    loss_fn = losses.SparseCategoricalCrossentropy(from_logits=False)
-    model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
+def create_tf_hub_classifier():
+    """
+    Loads a MobileNetV2 classification model (ImageNet) directly as a SavedModel,
+    wraps it in a custom tf.keras.Model subclass, then wraps *that* in ART.
+    """
+    # This loads a SavedModel from TF Hub:
+    base_model = hub.load("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5")
+    
+    # We'll define a small Keras Model that calls 'base_model' in its forward pass.
+    class HubModel(tf.keras.Model):
+        def call(self, inputs):
+            # base_model expects inputs in shape (batch, 224, 224, 3) and range [0,1]
+            return base_model(inputs)
+    
+    model = HubModel()
 
-    # Some random tiny data to "train"
-    X_train = np.random.rand(150, h, w, c).astype(np.float32)
-    y_train = np.random.randint(0, num_classes, size=(150,))
+    # We'll use CategoricalCrossentropy for multi-class probabilities (ImageNet).
+    loss_fn = losses.CategoricalCrossentropy(from_logits=False)
 
-    model.fit(X_train, y_train, epochs=epochs, batch_size=10, verbose=0)
-
-    # Here's the key: pass the same loss function object to ART
+    # Wrap the model in an ART TensorFlowV2Classifier
     art_classifier = TensorFlowV2Classifier(
         model=model,
-        nb_classes=num_classes,
-        input_shape=(h, w, c),
+        nb_classes=1001,
+        input_shape=(224, 224, 3),
         loss_object=loss_fn
     )
     return art_classifier
 
-############################################
-#       ADVERSARIAL ATTACK FUNCTIONS       #
-############################################
+###########################################################
+#       2) ADVERSARIAL ATTACK FUNCTIONS USING REAL MODEL  #
+###########################################################
 
 def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
-    print("Applying PGD Adversarial Noise (TensorFlow).")
-    h, w, c = image.shape
-    # ART expects (N, H, W, C) in [0,1]
-    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
+    print("Applying PGD Adversarial Noise (Real TF Model, Alternate Fix).")
 
-    classifier = create_tf_classifier(h, w, c)
+    # 1) Resize to 224x224 to match MobileNet
+    orig_h, orig_w, c = image.shape
+    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    x_input = resized.astype(np.float32)[None] / 255.0  # shape (1,224,224,3)
 
+    # 2) Build or load the classifier
+    classifier = create_tf_hub_classifier()
+
+    # 3) Run PGD
     attack = ProjectedGradientDescent(
         estimator=classifier,
         eps=eps,
@@ -87,34 +92,36 @@ def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
         max_iter=max_iter,
         targeted=False
     )
-    x_adv = attack.generate(x_input)
+    x_adv = attack.generate(x_input)  # shape (1,224,224,3)
 
-    # Rescale back to [0,255]
-    x_adv = x_adv * 255.0
-    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
-    return x_adv.reshape(h, w, c)
+    # 4) Rescale to [0,255], resize back to original
+    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
+    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    return adv_image
 
 def apply_fgm_adversarial_noise(image, epsilon=0.04):
-    print("Applying FGM Adversarial Noise (TensorFlow).")
-    h, w, c = image.shape
-    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
+    print("Applying FGM Adversarial Noise (Real TF Model, Alternate Fix).")
 
-    classifier = create_tf_classifier(h, w, c)
+    orig_h, orig_w, c = image.shape
+    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    x_input = resized.astype(np.float32)[None] / 255.0
 
+    classifier = create_tf_hub_classifier()
     attack = FastGradientMethod(estimator=classifier, eps=epsilon)
     x_adv = attack.generate(x_input)
 
-    x_adv = x_adv * 255.0
-    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
-    return x_adv.reshape(h, w, c)
+    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
+    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    return adv_image
 
 def apply_carlini_l2_noise(image, confidence=1.0, max_iter=20):
-    print("Applying Carlini-L2 Noise (TensorFlow).")
-    h, w, c = image.shape
-    x_input = image.astype(np.float32).reshape(1, h, w, c) / 255.0
+    print("Applying Carlini-L2 Noise (Real TF Model, Alternate Fix).")
 
-    classifier = create_tf_classifier(h, w, c)
+    orig_h, orig_w, c = image.shape
+    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    x_input = resized.astype(np.float32)[None] / 255.0
 
+    classifier = create_tf_hub_classifier()
     attack = CarliniL2Method(
         classifier=classifier,
         confidence=confidence,
@@ -122,9 +129,9 @@ def apply_carlini_l2_noise(image, confidence=1.0, max_iter=20):
     )
     x_adv = attack.generate(x_input)
 
-    x_adv = x_adv * 255.0
-    x_adv = np.clip(x_adv, 0, 255).astype(np.uint8)
-    return x_adv.reshape(h, w, c)
+    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
+    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    return adv_image
 
 ############################################
 #         IMAGE DISTORTION METHODS         #

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Obfuscate images so that OCR, AI detection, edge detection, etc. struggle.
-# Because, you know, Globi’s machines ain't gotta read everything.
 
 import os
 import cv2
@@ -9,7 +7,6 @@ import random
 import string
 from PIL import Image, PngImagePlugin
 
-# We keep ART for the adversarial methods, but note: you’ll want to
 # configure ART for PyTorch or TensorFlow if you need a real classifier.
 from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
 from art.estimators.classification import SklearnClassifier
