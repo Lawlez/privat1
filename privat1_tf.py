@@ -263,9 +263,9 @@ def protect_image(image_path, output_path):
     image = apply_compression(image, quality=80)
 
     # Multi-step adversarial approach (now all TensorFlow-based)
-    image = apply_pgd_with_upsized_delta(image, eps=0.08, eps_step=0.02, max_iter=8)
+    image = apply_pgd_with_upsized_delta(image, eps=0.08, eps_step=0.02, max_iter=15)
     image = apply_fgm_with_upsized_delta(image, epsilon=0.04)
-    image = apply_cwl2_with_upsized_delta(image, confidence=1.5, max_iter=15)
+    image = apply_cwl2_with_upsized_delta(image, confidence=1.5, max_iter=20)
 
     # Optionally embed random assets
     #image = embed_resized_images(image, "./assets")
@@ -302,7 +302,7 @@ def protect_image(image_path, output_path):
 
 if __name__ == "__main__":
     input_folder = "/Users/lwlx/PROJECTS/privat1/images/" 
-    output_folder = "/Users/lwlx/PROJECTS/privat1/converted/all2/"
+    output_folder = "/Users/lwlx/PROJECTS/privat1/converted/all3/"
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
