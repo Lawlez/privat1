@@ -254,7 +254,7 @@ def protect_image(image_path, output_path):
     print(f"Loaded image from {image_path}")
 
     # Distort the image in multiple ways
-    image = apply_blur(image, kernel_size=(3, 2))
+    image = apply_blur(image, kernel_size=(3, 3))
     image = apply_pixel_shift(image, shift_amount=6)
     image = apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.3)
     image = apply_random_perspective_transform(image)
