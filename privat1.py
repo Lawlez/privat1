@@ -208,7 +208,6 @@ def embed_resized_images(original_image, assets_path):
 
 # Combine methods to protect identity in an image
 def protect_image(image_path, output_path):
-    # Load the image
     image = load_image(image_path)
     
     # Apply series of transformations
