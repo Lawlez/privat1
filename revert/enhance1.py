@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 # Load the image
-image_path = "/mnt/data/f27c1bcaedf0dbd1.jpeg"
+image_path = "img.jpeg"
 image = cv2.imread(image_path, cv2.IMREAD_COLOR)
 
 # Check if the image was loaded correctly
