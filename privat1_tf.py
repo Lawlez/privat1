@@ -9,12 +9,11 @@ from PIL import Image, PngImagePlugin
 
 # ART imports
 from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
-from art.estimators.classification import TensorFlowV2Classifier
 
-import tensorflow as tf
-import tensorflow_hub as hub
-from tensorflow.keras import losses
-
+from PGD import apply_pgd_with_upsized_delta
+from FGM import apply_fgm_with_upsized_delta
+from carlini_wagner import apply_cwl2_with_upsized_delta    
+from helpers import create_tf_hub_classifier
 
 def load_image(image_path):
     """Loads image via OpenCV."""
@@ -37,44 +36,13 @@ def remove_metadata(image_path, output_path):
     image_no_metadata.save(output_path)
     print(f"Metadata removed and saved to {output_path}")
 
-############################################
-#       PRE-TRAINED MODEL SETUP (TF HUB)   #
-############################################
-
-def create_tf_hub_classifier():
-    """
-    Loads a MobileNetV2 classification model (ImageNet) directly as a SavedModel,
-    wraps it in a custom tf.keras.Model subclass, then wraps *that* in ART.
-    """
-    # This loads a SavedModel from TF Hub:
-    base_model = hub.load("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5")
-    
-    # We'll define a small Keras Model that calls 'base_model' in its forward pass.
-    class HubModel(tf.keras.Model):
-        def call(self, inputs):
-            # base_model expects inputs in shape (batch, 224, 224, 3) and range [0,1]
-            return base_model(inputs)
-    
-    model = HubModel()
-
-    # We'll use CategoricalCrossentropy for multi-class probabilities (ImageNet).
-    loss_fn = losses.CategoricalCrossentropy(from_logits=False)
-
-    # Wrap the model in an ART TensorFlowV2Classifier
-    art_classifier = TensorFlowV2Classifier(
-        model=model,
-        nb_classes=1001,
-        input_shape=(224, 224, 3),
-        loss_object=loss_fn
-    )
-    return art_classifier
 
 ###########################################################
 #       2) ADVERSARIAL ATTACK FUNCTIONS USING REAL MODEL  #
 ###########################################################
 
 def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
-    print("Applying PGD Adversarial Noise (Real TF Model, Alternate Fix).")
+    print("Applying PGD Adversarial Noise.")
 
     # 1) Resize to 224x224 to match MobileNet
     orig_h, orig_w, c = image.shape
@@ -100,7 +68,7 @@ def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
     return adv_image
 
 def apply_fgm_adversarial_noise(image, epsilon=0.04):
-    print("Applying FGM Adversarial Noise (Real TF Model, Alternate Fix).")
+    print("Applying FGM Adversarial Noise.")
 
     orig_h, orig_w, c = image.shape
     resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
@@ -115,7 +83,7 @@ def apply_fgm_adversarial_noise(image, epsilon=0.04):
     return adv_image
 
 def apply_carlini_l2_noise(image, confidence=1.0, max_iter=20):
-    print("Applying Carlini-L2 Noise (Real TF Model, Alternate Fix).")
+    print("Applying Carlini-L2 Noise.")
 
     orig_h, orig_w, c = image.shape
     resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
@@ -283,23 +251,24 @@ def embed_resized_images(original_image, assets_path):
 def protect_image(image_path, output_path):
     """Chained transformations + metadata confusion + stego + TF-based adversarial attacks."""
     image = load_image(image_path)
+    print(f"Loaded image from {image_path}")
 
     # Distort the image in multiple ways
-    image = apply_blur(image, kernel_size=(3, 3))
+    image = apply_blur(image, kernel_size=(3, 2))
     image = apply_pixel_shift(image, shift_amount=6)
     image = apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.3)
     image = apply_random_perspective_transform(image)
-    image = apply_noise(image, noise_level=25)
+    image = apply_noise(image, noise_level=20)
     image = apply_pixelation(image, pixel_size=3)
-    image = apply_compression(image, quality=70)
+    image = apply_compression(image, quality=80)
 
     # Multi-step adversarial approach (now all TensorFlow-based)
-    image = apply_pgd_adversarial_noise(image, eps=0.08, eps_step=0.02, max_iter=5)
-    image = apply_fgm_adversarial_noise(image, epsilon=0.03)
-    image = apply_carlini_l2_noise(image, confidence=1.5, max_iter=15)
+    image = apply_pgd_with_upsized_delta(image, eps=0.08, eps_step=0.02, max_iter=8)
+    image = apply_fgm_with_upsized_delta(image, epsilon=0.04)
+    image = apply_cwl2_with_upsized_delta(image, confidence=1.5, max_iter=15)
 
     # Optionally embed random assets
-    image = embed_resized_images(image, "./assets")
+    #image = embed_resized_images(image, "./assets")
 
     # Add dummy metadata and stego keywords
     keywords = ["ducks", "sea", "rubber ducky", "flying in space", "unicorn", "quantum banana"]
@@ -319,7 +288,7 @@ def protect_image(image_path, output_path):
 
     # Save final obfuscated image
     _, ext = os.path.splitext(image_path)
-    ext = ext[1:]  # remove the dot
+    ext = ext[1:] 
     output_file_name = generate_random_name(ext)
     output_file_path = os.path.join(output_path, output_file_name)
     cv2.imwrite(output_file_path, image)
