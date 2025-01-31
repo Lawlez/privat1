@@ -11,8 +11,6 @@ from PIL import Image, PngImagePlugin
 from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
 from art.estimators.classification import TensorFlowV2Classifier
 
-# Minimal TF includes
-#import tensorflow as tf
 from tensorflow.keras import layers, models, losses
 
 ############################################
@@ -56,8 +54,8 @@ def create_tf_classifier(h, w, c, num_classes=2, epochs=2):
     model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
 
     # Some random tiny data to "train"
-    X_train = np.random.rand(50, h, w, c).astype(np.float32)
-    y_train = np.random.randint(0, num_classes, size=(50,))
+    X_train = np.random.rand(150, h, w, c).astype(np.float32)
+    y_train = np.random.randint(0, num_classes, size=(150,))
 
     model.fit(X_train, y_train, epochs=epochs, batch_size=10, verbose=0)
 
