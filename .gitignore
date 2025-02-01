@@ -4,3 +4,11 @@ lib/
 include/
 pyvenv.cfg
 
+/__pycache__
+.DS_Store
+converted/.DS_Store
+/converted/all2
+/converted/all3
+/images copy
+output_with_metadata.png
+/src/__pycache__
