@@ -10,6 +10,7 @@ from PIL import Image, PngImagePlugin
 from PGD import apply_pgd_with_upsized_delta
 from FGM import apply_fgm_with_upsized_delta
 from carlini_wagner import apply_cwl2_with_upsized_delta
+from OPA import apply_opa_with_upsized_delta
 
 def load_image(image_path):
     """Loads image via OpenCV."""
@@ -39,7 +40,7 @@ def remove_metadata(image_path, output_path):
 def apply_pixel_shift(image, shift_amount=8):
     print("Applying Pixel Shift.")
     shifted_image = image.copy()
-    h, w, c = shifted_image.shape
+    h, w, _ = shifted_image.shape
     for y in range(0, h, 2):
         for x in range(0, w, 2):
             if (x + shift_amount) < w and (y + shift_amount) < h:
@@ -79,7 +80,7 @@ def apply_pixelation(image, pixel_size=4):
 def apply_compression(image, quality=75):
     print("Applying JPEG compression.")
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
-    result, encimg = cv2.imencode('.jpg', image, encode_param)
+    _, encimg = cv2.imencode('.jpg', image, encode_param)
     compressed_image = cv2.imdecode(encimg, 1)
     return compressed_image
 
@@ -146,7 +147,7 @@ def embed_keywords_and_metadata(image, keywords, metadata):
 
 def embed_resized_images(original_image, assets_path):
     print("Embedding small training images in random regions.")
-    h, w, c = original_image.shape
+    h, w, _ = original_image.shape
     resized_images = []
 
     for file_name in os.listdir(assets_path):
@@ -194,12 +195,14 @@ def protect_image(image_path, output_path):
     image = apply_compression(image, quality=80)
 
     # Multi-step adversarial approach (now all TensorFlow-based)
-    image = apply_pgd_with_upsized_delta(image, eps=0.09, eps_step=0.1, max_iter=30)
-    image = apply_fgm_with_upsized_delta(image, epsilon=0.06, eps_steps=0.1, target_label=0)
-    image = apply_cwl2_with_upsized_delta(image, confidence=3.0, max_iter=25)
+    image = apply_opa_with_upsized_delta(image, th=15, es=20)
+    image = apply_fgm_with_upsized_delta(image, epsilon=0.08, eps_steps=0.01, target_label=0)
+    image = apply_pgd_with_upsized_delta(image, eps=0.09, eps_step=0.01, max_iter=1, target_label=224)
+    image = apply_cwl2_with_upsized_delta(image, confidence=3.0, max_iter=15, target_label=384)
+    
 
     # Optionally embed random assets
-    #image = embed_resized_images(image, "./assets")
+    image = embed_resized_images(image, "./assets")
 
     # Add dummy metadata and stego keywords
     keywords = ["ducks", "sea", "rubber ducky", "flying in space", "unicorn", "quantum banana"]
@@ -207,7 +210,7 @@ def protect_image(image_path, output_path):
         "Description": "This is an image of quantum bananas with interstellar rubber ducks. Confusion intensifies.",
         "Keywords": "ducks, space bananas, dancing hippos, quantum mechanics, asparagus rocket",
         "Software": "Adobe GlobiShop 99.0 (ultimate confusion edition)",
-        "Author": "Elon Musk, John Doe, Chewbacca",
+        "Author": "Pandora, John Doe, Chewbacca",
         "Width": "99999",
         "Height": "88888",
         "ColorProfile": "Psychedelic Dream Sequence",
@@ -220,7 +223,7 @@ def protect_image(image_path, output_path):
     # Save final obfuscated image
     _, ext = os.path.splitext(image_path)
     ext = ext[1:] 
-    output_file_name = f'{generate_random_name(ext)}'
+    output_file_name = f'x2_{generate_random_name(ext)}'
     output_file_path = os.path.join(output_path, output_file_name)
     cv2.imwrite(output_file_path, image)
     print(f"Protected image saved to {output_file_path}")
@@ -232,8 +235,8 @@ def protect_image(image_path, output_path):
 ############################################
 
 if __name__ == "__main__":
-    input_folder = "/Users/lwlx/PROJECTS/privat1/images/" 
-    output_folder = "/Users/lwlx/PROJECTS/privat1/converted/"
+    input_folder = "images/" 
+    output_folder = "converted/testing"
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)

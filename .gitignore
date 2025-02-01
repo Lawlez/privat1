@@ -12,3 +12,4 @@ converted/.DS_Store
 /images copy
 output_with_metadata.png
 /src/__pycache__
+/converted/testing
