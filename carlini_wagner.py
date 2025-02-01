@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from helpers import create_tf_hub_classifier
 
-def apply_cwl2_with_upsized_delta(original_image, confidence=1.0, max_iter=20):
+def apply_cwl2_with_upsized_delta(original_image, confidence=1.0, max_iter=20, target_label=0):
     """
     Generates an adversarial delta at 224x224 using Carlini L2,
     upsizes that delta, applies to the original for minimal resolution loss.
@@ -17,15 +17,20 @@ def apply_cwl2_with_upsized_delta(original_image, confidence=1.0, max_iter=20):
     # 2) Downsize to 224×224
     small_img = cv2.resize(original_image, (224, 224), interpolation=cv2.INTER_LINEAR)
     x_small = small_img.astype(np.float32)[None] / 255.0  # shape (1,224,224,3)
+    
+    num_classes = 1001  # ImageNet has 1001 classes
+    y_target = np.zeros((1, num_classes), dtype=np.float32)
+    y_target[0, target_label] = 1.0
 
     # 3) Run Carlini L2 on the smaller version
     classifier = create_tf_hub_classifier()
     attack = CarliniL2Method(
         classifier=classifier,
         confidence=confidence,
-        max_iter=max_iter
+        max_iter=max_iter,
+        targeted=True
     )
-    x_adv_small = attack.generate(x_small)  # shape (1,224,224,3), in [0,1]
+    x_adv_small = attack.generate(x=x_small, y=y_target)  # shape (1,224,224,3), in [0,1]
 
     # 4) delta
     delta_small = x_adv_small - x_small  # shape (1,224,224,3)
