@@ -122,7 +122,7 @@ This project is released under an open-source license. Use it for research and e
 
 analyze input image using imagenet using verify.py
 ```
-🖼️ Image: /Users/lwlx/PROJECTS/privat1/images/img4sm.jpeg
+🖼️ Image: privat1/images/img4sm.jpeg
   - keeshond (ID 262) -> Confidence: 8.0951
   - schipperke (ID 224) -> Confidence: 5.3002
   - groenendael (ID 225) -> Confidence: 4.9950
@@ -139,7 +139,7 @@ analyze input image using imagenet using verify.py
 we will try throwing it off using "Norwegian elkhound" for the first iteration.
 We will only run PGD & FGM, to get best results we play around with the settings a little and use multiple iterations until we end up with this:
 ```
-🖼️ Image: /Users/lwlx/PROJECTS/privat1/converted/no_metadata_P3_fc38241dd4e7acc6.jpeg
+🖼️ Image: privat1/converted/no_metadata_P3_fc38241dd4e7acc6.jpeg
   - window screen (ID 905) -> Confidence: 7.0242
   - skunk (ID 362) -> Confidence: 5.4991
   - gorilla (ID 367) -> Confidence: 5.2047
