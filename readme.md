@@ -34,18 +34,34 @@ Detection After
 ✅ Success: No forbidden objects detected.
 ```
 
+be aware this was run using a combination of all attacks, which is not alwass the best performing option. it was also done using a general target. For best result the target should be choosen sperately for each input image. f.e. for the above a good target might be "abaya" since it already has some confidence there and we could throw it off completely.
 
-## enhancing & analyisis
+## Enhancing & analysis
 Examples and tools in /revert
 
-Enhance1 (contrast enhancement):
-![Enhance1](revert/enhance1_img.png)
+### Enhance1 (contrast enhancement):
 
-Enhance2 (edge detection & thresholding):
+![Enhance1](revert/enhance1_img.png)
+Enhance 1 can help better identify the subject of an image.
+
+### Enhance2 (edge detection & thresholding):
+
 ![Enhance2](revert/enhance2_img.png)
 
-Enhance3 (LSB analysis and frequency spectrum):
+As you can see Enhance2's edge detection miserably fails on our protected image. however using threshold we could still make it work.
+
+### Enhance3 (LSB analysis and frequency spectrum):
+
 ![Enhance3](revert/enhance3_img.png)
+
+As you can see even tho we have data embedded in the image the lsb pattern is radnomized very well, making it hard to detect hiddne data. the Frequency spectrumg gives hints to a trained eye that the image has been edited, but also here is to much randomness.
+
+below is a example from ehance 2 & 3 on an unedited image:
+![enhance2](revert/enhance2_img4.png)
+
+![enhance3](revert/enhance3_img4.png)
+
+As you can see on an unedited picture the patterns are quite different. With enhance 2 you can clearly see the subjects outlines and edges in all pictures. With using enhance 3 you can see a more natural pattern for the LSB analysis, thsi is to be expected. in the FS you can clearly see how clean the lines would be on a standard camera captureed image. 
 
 ## Getting Started
 
