@@ -7,13 +7,9 @@ import random
 import string
 from PIL import Image, PngImagePlugin
 
-# ART imports
-from art.attacks.evasion import FastGradientMethod, CarliniL2Method, ProjectedGradientDescent
-
 from PGD import apply_pgd_with_upsized_delta
 from FGM import apply_fgm_with_upsized_delta
-from carlini_wagner import apply_cwl2_with_upsized_delta    
-from helpers import create_tf_hub_classifier
+from carlini_wagner import apply_cwl2_with_upsized_delta
 
 def load_image(image_path):
     """Loads image via OpenCV."""
@@ -35,71 +31,6 @@ def remove_metadata(image_path, output_path):
     image_no_metadata.putdata(data)
     image_no_metadata.save(output_path)
     print(f"Metadata removed and saved to {output_path}")
-
-
-###########################################################
-#       2) ADVERSARIAL ATTACK FUNCTIONS USING REAL MODEL  #
-###########################################################
-
-def apply_pgd_adversarial_noise(image, eps=0.06, eps_step=0.01, max_iter=10):
-    print("Applying PGD Adversarial Noise.")
-
-    # 1) Resize to 224x224 to match MobileNet
-    orig_h, orig_w, c = image.shape
-    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
-    x_input = resized.astype(np.float32)[None] / 255.0  # shape (1,224,224,3)
-
-    # 2) Build or load the classifier
-    classifier = create_tf_hub_classifier()
-
-    # 3) Run PGD
-    attack = ProjectedGradientDescent(
-        estimator=classifier,
-        eps=eps,
-        eps_step=eps_step,
-        max_iter=max_iter,
-        targeted=False
-    )
-    x_adv = attack.generate(x_input)  # shape (1,224,224,3)
-
-    # 4) Rescale to [0,255], resize back to original
-    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
-    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-    return adv_image
-
-def apply_fgm_adversarial_noise(image, epsilon=0.04):
-    print("Applying FGM Adversarial Noise.")
-
-    orig_h, orig_w, c = image.shape
-    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
-    x_input = resized.astype(np.float32)[None] / 255.0
-
-    classifier = create_tf_hub_classifier()
-    attack = FastGradientMethod(estimator=classifier, eps=epsilon)
-    x_adv = attack.generate(x_input)
-
-    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
-    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-    return adv_image
-
-def apply_carlini_l2_noise(image, confidence=1.0, max_iter=20):
-    print("Applying Carlini-L2 Noise.")
-
-    orig_h, orig_w, c = image.shape
-    resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
-    x_input = resized.astype(np.float32)[None] / 255.0
-
-    classifier = create_tf_hub_classifier()
-    attack = CarliniL2Method(
-        classifier=classifier,
-        confidence=confidence,
-        max_iter=max_iter
-    )
-    x_adv = attack.generate(x_input)
-
-    adv_resized = (x_adv[0] * 255.0).clip(0, 255).astype(np.uint8)
-    adv_image = cv2.resize(adv_resized, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-    return adv_image
 
 ############################################
 #         IMAGE DISTORTION METHODS         #
@@ -263,9 +194,9 @@ def protect_image(image_path, output_path):
     image = apply_compression(image, quality=80)
 
     # Multi-step adversarial approach (now all TensorFlow-based)
-    image = apply_pgd_with_upsized_delta(image, eps=0.08, eps_step=0.02, max_iter=15)
-    image = apply_fgm_with_upsized_delta(image, epsilon=0.04)
-    image = apply_cwl2_with_upsized_delta(image, confidence=1.5, max_iter=20)
+    image = apply_pgd_with_upsized_delta(image, eps=0.09, eps_step=0.1, max_iter=30)
+    image = apply_fgm_with_upsized_delta(image, epsilon=0.06, eps_steps=0.1, target_label=0)
+    image = apply_cwl2_with_upsized_delta(image, confidence=3.0, max_iter=25)
 
     # Optionally embed random assets
     #image = embed_resized_images(image, "./assets")
@@ -289,7 +220,7 @@ def protect_image(image_path, output_path):
     # Save final obfuscated image
     _, ext = os.path.splitext(image_path)
     ext = ext[1:] 
-    output_file_name = generate_random_name(ext)
+    output_file_name = f'{generate_random_name(ext)}'
     output_file_path = os.path.join(output_path, output_file_name)
     cv2.imwrite(output_file_path, image)
     print(f"Protected image saved to {output_file_path}")
@@ -302,7 +233,7 @@ def protect_image(image_path, output_path):
 
 if __name__ == "__main__":
     input_folder = "/Users/lwlx/PROJECTS/privat1/images/" 
-    output_folder = "/Users/lwlx/PROJECTS/privat1/converted/all3/"
+    output_folder = "/Users/lwlx/PROJECTS/privat1/converted/"
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
