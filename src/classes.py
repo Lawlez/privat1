@@ -8,5 +8,5 @@ print("Number of labels:", len(labels_text))  # should be 1001
 # Let's see which line contains 'keeshond'
 for i, label in enumerate(labels_text):
     # Make it lowercase for a quick substring check
-    if "pizza" in label.lower():
+    if "background" in label.lower():
         print(i, label)
