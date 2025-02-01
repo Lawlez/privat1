@@ -77,7 +77,7 @@ def process_directory(directory_path, forbidden_classes):
         classify_image(os.path.join(directory_path, image_file), forbidden_classes)
 
 # Set your directory and forbidden classes here
-IMAGE_DIRECTORY = "/Users/lwlx/PROJECTS/privat1/converted/examples"
+IMAGE_DIRECTORY = "/Users/lwlx/PROJECTS/privat1/images"
 FORBIDDEN_CLASSES = ["keeshond", "church", "suit", "mask"]  # Add classes you want to avoid
 
 process_directory(IMAGE_DIRECTORY, FORBIDDEN_CLASSES)

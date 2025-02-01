@@ -2,6 +2,51 @@
 
 This repository contains implementations of various adversarial attack methods on neural networks. It is designed to help researchers and practitioners explore adversarial robustness and test different attack strategies against deep learning models.
 
+
+## Examples
+Initial image:
+
+![original](images/th3.jpeg)
+
+Detection before:
+```
+🖼️ Image: privat1/images/th3.jpeg
+  - suit (ID 835) -> Confidence: 6.3251
+  - ski mask (ID 797) -> Confidence: 5.3537
+  - abaya (ID 400) -> Confidence: 5.3193
+  - trench coat (ID 870) -> Confidence: 5.1354
+  - Windsor tie (ID 907) -> Confidence: 4.6823
+❌ Forbidden object detected!
+```
+
+Obfuscated image:
+
+![obfuscated](converted/examples/minimal_adv_all_cbbdddb1ae7a55a3.jpeg)
+
+Detection After 
+```
+🖼️ Image: privat1/converted/examples/minimal_adv_all_cbbdddb1ae7a55a3.jpeg
+  - jigsaw puzzle (ID 612) -> Confidence: 8.2029
+  - fur coat (ID 569) -> Confidence: 6.1599
+  - bearskin (ID 440) -> Confidence: 5.8124
+  - chain mail (ID 491) -> Confidence: 5.3193
+  - monastery (ID 664) -> Confidence: 5.2024
+✅ Success: No forbidden objects detected.
+```
+
+
+## enhancing & analyisis
+Examples and tools in /revert
+
+Enhance1 (contrast enhancement):
+![Enhance1](revert/enhance1_img.png)
+
+Enhance2 (edge detection & thresholding):
+![Enhance2](revert/enhance2_img.png)
+
+Enhance3 (LSB analysis and frequency spectrum):
+![Enhance3](revert/enhance3_img.png)
+
 ## Getting Started
 
 The main entry point for this repository is **`privat1_tf.py`**. This script orchestrates the adversarial attacks, applies transformations to input images, and integrates various attack implementations.
