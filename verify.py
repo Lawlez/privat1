@@ -40,7 +40,7 @@ def classify_image(image_path, forbidden_classes):
 
     # Run classification
     predictions = model(img_expanded).numpy()
-    top5_indices = np.argsort(predictions[0])[-5:][::-1]  # Get top 5 predictions
+    top5_indices = np.argsort(predictions[0])[-10:][::-1]  # Get top 5 predictions
 
     detected_labels = [(labels[idx], idx, predictions[0][idx]) for idx in top5_indices]
 

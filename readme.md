@@ -36,12 +36,16 @@ Detection After
 
 be aware this was run using a combination of all attacks, which is not alwass the best performing option. it was also done using a general target. For best result the target should be choosen sperately for each input image. f.e. for the above a good target might be "abaya" since it already has some confidence there and we could throw it off completely.
 
+More examples are available under: 
+[Examples](converted/examples)
+
 ## Enhancing & analysis
 Examples and tools in /revert
 
 ### Enhance1 (contrast enhancement):
 
 ![Enhance1](revert/enhance1_img.png)
+
 Enhance 1 can help better identify the subject of an image.
 
 ### Enhance2 (edge detection & thresholding):
@@ -114,3 +118,39 @@ Feel free to contribute by improving existing implementations, adding new advers
 ## License
 This project is released under an open-source license. Use it for research and educational purposes only.
 
+## advanced usage
+
+analyze input image using imagenet using verify.py
+```
+🖼️ Image: /Users/lwlx/PROJECTS/privat1/images/img4sm.jpeg
+  - keeshond (ID 262) -> Confidence: 8.0951
+  - schipperke (ID 224) -> Confidence: 5.3002
+  - groenendael (ID 225) -> Confidence: 4.9950
+  - Pomeranian (ID 260) -> Confidence: 4.9746
+  - langur (ID 375) -> Confidence: 4.5492
+  - indri (ID 385) -> Confidence: 3.5839
+  - Shetland sheepdog (ID 231) -> Confidence: 3.4943
+  - Chihuahua (ID 152) -> Confidence: 3.4302
+  - Norwegian elkhound (ID 175) -> Confidence: 3.3912
+  - Madagascar cat (ID 384) -> Confidence: 3.0115
+❌ Forbidden object detected!
+```
+
+we will try throwing it off using "Norwegian elkhound" for the first iteration.
+We will only run PGD & FGM, to get best results we play around with the settings a little and use multiple iterations until we end up with this:
+```
+🖼️ Image: /Users/lwlx/PROJECTS/privat1/converted/no_metadata_P3_fc38241dd4e7acc6.jpeg
+  - window screen (ID 905) -> Confidence: 7.0242
+  - skunk (ID 362) -> Confidence: 5.4991
+  - gorilla (ID 367) -> Confidence: 5.2047
+  - tabby (ID 282) -> Confidence: 4.6789
+  - sloth bear (ID 298) -> Confidence: 4.1550
+  - mosquito net (ID 670) -> Confidence: 4.0545
+  - chow (ID 261) -> Confidence: 3.9916
+  - Madagascar cat (ID 384) -> Confidence: 3.9874
+  - wood rabbit (ID 331) -> Confidence: 3.9713
+  - titi (ID 381) -> Confidence: 3.9481
+✅ Success: No forbidden objects detected.
+```
+
+![obfuscated image](converted/no_metadata_P3_fc38241dd4e7acc6.jpeg)

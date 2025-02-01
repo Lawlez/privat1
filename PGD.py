@@ -3,7 +3,7 @@ import numpy as np
 from art.attacks.evasion import ProjectedGradientDescent
 from helpers import create_tf_hub_classifier
 
-def apply_pgd_with_upsized_delta(original_image, eps=0.06, eps_step=0.01, max_iter=10):
+def apply_pgd_with_upsized_delta(original_image, eps=0.06, eps_step=0.01, max_iter=10, target_label=964):
     """
     Computes adversarial delta at 224x224, then upsizes the delta and applies
     it to the original, preserving more detail than doing a full down->up.
