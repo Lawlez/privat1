@@ -40,7 +40,7 @@ The main entry point for this repository is **`privat1_tf.py`**. This script orc
 
 This repository is currently only compatible with macOS, as it relies on tensorflow-macos and tensorflow-metal for acceleration. Ensure that you have the required Python libraries installed before running the scripts:
 ```
-pip install tensorflow-macos tensorflow-metal numpy torch art torchvision matplotlib tensorflow_hub
+pip install -r requirements.txt
 ```
 Then, to run an attack, execute:
 ```
