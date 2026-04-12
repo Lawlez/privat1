@@ -15,7 +15,7 @@ def apply_fgm_with_upsized_delta(original_image, epsilon=0.06, eps_steps=0.02,  
     x_orig_float = original_image.astype(np.float32) / 255.0
 
     # Downsize image to 224×224 for the model
-    small_img = cv2.resize(original_image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    small_img = cv2.resize(original_image, (224, 224), interpolation=cv2.INTER_AREA)
     x_small = small_img.astype(np.float32)[None] / 255.0  # shape (1,224,224,3)
 
     #set up a target label (one-hot encoding)
@@ -33,7 +33,7 @@ def apply_fgm_with_upsized_delta(original_image, epsilon=0.06, eps_steps=0.02,  
 
     # Upsize delta to match original resolution
     delta_small_0 = delta_small[0]  # remove batch dimension
-    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR_EXACT)
 
     # Add the upscaled delta to the original float
     x_orig_adv = x_orig_float + delta_big
