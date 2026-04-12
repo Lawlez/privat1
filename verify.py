@@ -15,69 +15,72 @@ if not os.path.exists(LABELS_FILE):
     with open(LABELS_FILE, "w") as f:
         f.write(response.text)
 
-# Read labels
 with open(LABELS_FILE, "r") as f:
     labels = [line.strip() for line in f.readlines()]
 
-# Load the MobileNet model from TF Hub
 print("Loading MobileNetV2 model...")
 model = hub.load("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5")
 
 def classify_image(image_path, forbidden_classes):
     """
-    Classifies an image and checks if any of the detected labels match the forbidden classes.
+    Classifies an image and returns a dict with the image path,
+    detected labels, and the highest confidence.
     """
-    # Load image
     image = cv2.imread(image_path)
     if image is None:
         print(f"⚠️ Failed to load image: {image_path}")
-        return
+        return None
     
-    # Resize and normalize
     img_resized = cv2.resize(image, (224, 224))
     img_normalized = img_resized.astype(np.float32) / 255.0
-    img_expanded = np.expand_dims(img_normalized, axis=0)  # Add batch dimension
+    img_expanded = np.expand_dims(img_normalized, axis=0)
 
-    # Run classification
     predictions = model(img_expanded).numpy()
-    top5_indices = np.argsort(predictions[0])[-10:][::-1]  # Get top 5 predictions
+    top_indices = np.argsort(predictions[0])[-10:][::-1]
+    detected_labels = [(labels[idx], idx, predictions[0][idx]) for idx in top_indices]
 
-    detected_labels = [(labels[idx], idx, predictions[0][idx]) for idx in top5_indices]
-
-    # Print results
     print(f"\n🖼️ Image: {image_path}")
     for name, idx, prob in detected_labels:
         print(f"  - {name} (ID {idx}) -> Confidence: {prob:.4f}")
 
-    # Check if any detected label is in the forbidden list
     detected_names = {name.lower() for name, _, _ in detected_labels}
     forbidden_names = {cls.lower() for cls in forbidden_classes}
-
     if detected_names & forbidden_names:
         print("❌ Forbidden object detected!")
     else:
         print("✅ Success: No forbidden objects detected.")
 
+    top_confidence = detected_labels[0][2] if detected_labels else 0.0
+    return {"image_path": image_path, "detected_labels": detected_labels, "top_confidence": top_confidence}
+
 def process_directory(directory_path, forbidden_classes):
     """
-    Processes all images in the given directory.
+    Processes all images in the given directory, sorts them by highest
+    confidence (across all predictions), and prints the sorted list.
     """
     if not os.path.exists(directory_path):
         print("⚠️ Directory does not exist!")
         return
 
     image_files = [f for f in os.listdir(directory_path) if f.lower().endswith((".jpg", ".png", ".jpeg"))]
-    
     if not image_files:
         print("⚠️ No valid image files found in the directory!")
         return
 
     print(f"\n📂 Processing {len(image_files)} images in '{directory_path}'...\n")
+    results = []
     for image_file in image_files:
-        classify_image(os.path.join(directory_path, image_file), forbidden_classes)
+        result = classify_image(os.path.join(directory_path, image_file), forbidden_classes)
+        if result is not None:
+            results.append(result)
+    
+    sorted_results = sorted(results, key=lambda x: x["top_confidence"], reverse=True)
+    
+    print("\n🔍 Sorted results by highest confidence:")
+    for res in sorted_results:
+        print(f"Image: {res['image_path']} | Top Confidence: {res['top_confidence']:.4f}")
 
-# Set your directory and forbidden classes here
-IMAGE_DIRECTORY = "/Users/lwlx/PROJECTS/privat1/images"
-FORBIDDEN_CLASSES = ["keeshond", "church", "suit", "mask"]  # Add classes you want to avoid
+IMAGE_DIRECTORY = "converted/testing/x"
+FORBIDDEN_CLASSES = ["keeshond"]
 
 process_directory(IMAGE_DIRECTORY, FORBIDDEN_CLASSES)
