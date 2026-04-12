@@ -8,6 +8,12 @@ import os
 # Suppress TensorFlow C++ internal logs before importing TF
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+import tensorflow as tf
+# CRITICAL FIX for Apple Silicon: Disable Metal GPU. 
+# The tensorflow-metal plugin currently contains a bug that corrupts backpropagation gradients 
+# on MobileNetV2, inexplicably restricting all adversarial noise to a 43x43 top-left corner box.
+tf.config.set_visible_devices([], 'GPU')
+
 import argparse
 import logging
 import random
@@ -83,20 +89,38 @@ def remove_metadata(image_source, output_path: Path):
 def apply_adversarial_step(
     image: np.ndarray, 
     attack_type: str = "pgd", 
-    eps: float = 0.04, 
+    eps: float = 0.05, 
     iters: int = 15,
-    confidence: float = 1.0,
     target_label: int = 865
 ) -> np.ndarray:
     """
     Dispatcher for modular adversarial attacks.
     """
-    if attack_type == "pgd":
-        return apply_pgd_with_upsized_delta(image, epsilon=eps, max_iter=iters, target_label=target_label)
-    elif attack_type == "fgm":
-        return apply_fgm_with_upsized_delta(image, epsilon=eps, target_label=target_label)
-    else:
-        logger.warning(f"Unknown attack type {attack_type}, skipping.")
+    attack_type = attack_type.strip().lower()
+    try:
+        if attack_type == "pgd":
+            from src.attacks.PGD import apply_pgd_with_upsized_delta
+            return apply_pgd_with_upsized_delta(image, epsilon=eps, max_iter=iters, target_label=target_label)
+        elif attack_type == "fgm":
+            from src.attacks.FGM import apply_fgm_with_upsized_delta
+            return apply_fgm_with_upsized_delta(image, epsilon=eps, target_label=target_label)
+        elif attack_type == "apa":
+            from src.attacks.APA import apply_apa_with_upsized_delta
+            return apply_apa_with_upsized_delta(image, target_label=target_label)
+        elif attack_type == "staa":
+            from src.attacks.STAA import apply_staa_with_upsized_delta
+            return apply_staa_with_upsized_delta(image, target_label=target_label)
+        elif attack_type == "carlini_wagner" or attack_type == "cw":
+            from src.attacks.carlini_wagner import apply_cw_with_upsized_delta
+            return apply_cw_with_upsized_delta(image, target_label=target_label)
+        elif attack_type == "opa":
+            from src.attacks.OPA import apply_opa_with_upsized_delta
+            return apply_opa_with_upsized_delta(image, target_label=target_label)
+        else:
+            logger.warning(f"Unknown attack type {attack_type}, skipping.")
+            return image
+    except Exception as e:
+        logger.error(f"Failed to apply attack {attack_type}: {e}")
         return image
 
 ############################################
@@ -123,9 +147,18 @@ def protect_image(input_path: Path, output_dir: Path, args: argparse.Namespace, 
 
     # 2. Adversarial Attacks
     if not args.no_adv:
-        # Chaining PGD and FGM for maximum disruption
-        image = apply_adversarial_step(image, attack_type="pgd", eps=args.eps, iters=8)
-        image = apply_adversarial_step(image, attack_type="fgm", eps=args.eps * 0.8)
+        attack_list = [a.strip().lower() for a in args.attacks.split(',')]
+        for attack_name in attack_list:
+            eps_to_use = args.eps
+            if attack_name == "fgm":
+                 eps_to_use = args.eps * 0.8
+            image = apply_adversarial_step(
+                 image, 
+                 attack_type=attack_name, 
+                 eps=eps_to_use, 
+                 iters=40, 
+                 target_label=args.target
+            )
 
     # 3. Assets/Distractors
     if args.assets:
@@ -174,6 +207,8 @@ def main():
     parser.add_argument("--pixel-size", type=int, default=3, help="Pixelation size")
     parser.add_argument("--mask-opacity", type=float, default=0.2, help="Pattern mask opacity")
     parser.add_argument("--workers", type=int, default=6, help="Number of parallel workers")
+    parser.add_argument("--attacks", type=str, default="pgd,fgm", help="Comma-separated attacks to run (e.g. pgd,fgm,apa,staa)")
+    parser.add_argument("--target", type=int, default=865, help="Target class ID for targeted attacks")
     parser.add_argument("--assets", type=str, help="Optional path to training/distractor images")
     parser.add_argument("--no-adv", action="store_true", help="Disable adversarial attacks")
     parser.add_argument("--no-distort", action="store_true", help="Disable structural distortions")

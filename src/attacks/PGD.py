@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 def apply_pgd_with_upsized_delta(
     original_image: np.ndarray, 
     epsilon: float = 0.06, 
-    eps_step: float = 0.01, 
-    max_iter: int = 10, 
-    target_label: int = 262
+    eps_step: float = None, 
+    max_iter: int = 15, 
+    target_label: int = 865
 ) -> np.ndarray:
     """
     Generates an adversarial delta at 224x224 using targeted PGD,
@@ -38,6 +38,10 @@ def apply_pgd_with_upsized_delta(
     y_target = np.zeros((1, num_classes), dtype=np.float32)
     y_target[0, target_label] = 1.0
 
+    # Dynamic step sizing if none provided
+    if eps_step is None:
+        eps_step = epsilon / 5.0
+
     # PGD Attack
     attack = ProjectedGradientDescent(
         estimator=classifier, 
@@ -48,9 +52,17 @@ def apply_pgd_with_upsized_delta(
     )
     x_adv_small = attack.generate(x=x_small, y=y_target)
 
-    # Delta scaling with higher-order interpolation for high-res stability
+    # Clean any NaN/Inf failures caused by steep numerical gradients
     delta_small = x_adv_small - x_small
-    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    delta_small = np.nan_to_num(delta_small, nan=0.0, posinf=0.0, neginf=0.0)
+    delta_small = np.clip(delta_small, -epsilon, epsilon).astype(np.float32)
+    
+    # Delta scaling with cubic interpolation to softly blend adversarial patterns
+    delta_small_contig = np.ascontiguousarray(delta_small[0], dtype=np.float32)
+    delta_big = cv2.resize(delta_small_contig, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    
+    # Slight blur to fully blend sharp boundaries
+    delta_big = cv2.GaussianBlur(delta_big, (3, 3), 0)
     
     # Safe merge with floating point precision
     x_orig_adv = np.clip(x_orig_float + delta_big.astype(np.float32), 0.0, 1.0)
@@ -62,8 +74,8 @@ def main():
     parser.add_argument("output", type=str, help="Path to save output image")
     parser.add_argument("--eps", type=float, default=0.06, help="Epsilon (attack strength)")
     parser.add_argument("--step", type=float, default=0.01, help="Epsilon step")
-    parser.add_argument("--iters", type=int, default=10, help="Max iterations")
-    parser.add_argument("--target", type=int, default=262, help="Target class ID")
+    parser.add_argument("--iters", type=int, default=15, help="Max iterations")
+    parser.add_argument("--target", type=int, default=865, help="Target class ID")
     
     args = parser.parse_args()
     

@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 def apply_staa_with_upsized_delta(
     original_image: np.ndarray, 
-    max_translation: float = 10.0, 
-    max_rotation: float = 10.0, 
+    max_translation: float = 3.0, 
+    max_rotation: float = 2.0, 
     target_label: int = 262
 ) -> np.ndarray:
     """

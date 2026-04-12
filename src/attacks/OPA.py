@@ -14,7 +14,8 @@ def apply_opa_with_upsized_delta(
     original_image: np.ndarray, 
     th: int = 5, 
     es: int = 50, 
-    apply_pgd: bool = False
+    apply_pgd: bool = False,
+    target_label: int = 865
 ) -> np.ndarray:
     """
     Applies a One-Pixel Attack by modifying multiple pixels.
@@ -73,7 +74,7 @@ def main():
         logger.error(f"Failed to load image {input_path}")
         return
 
-    adv_image = apply_opa_with_upsized_delta(image, th=args.pixels, es=args.iters, apply_pgd=args.pgd)
+    adv_image = apply_opa_with_upsized_delta(image, th=args.pixels, es=args.iters, apply_pgd=args.pgd, target_label=865)
     
     cv2.imwrite(args.output, adv_image)
     logger.info(f"One-pixel attack image saved to {args.output}")

@@ -6,6 +6,7 @@ from typing import Optional, List
 import cv2
 import numpy as np
 import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
 import tensorflow_hub as hub
 import warnings
 # Suppress cosmetic warnings from ART regarding missing optional frameworks (PyTorch)

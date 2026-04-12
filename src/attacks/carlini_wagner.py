@@ -10,10 +10,10 @@ import sys; from pathlib import Path; sys.path.append(str(Path(__file__).resolve
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-def apply_cwl2_with_upsized_delta(
+def apply_cw_with_upsized_delta(
     original_image: np.ndarray, 
     confidence: float = 1.0, 
-    max_iter: int = 20, 
+    max_iter: int = 10, 
     target_label: int = 262
 ) -> np.ndarray:
     """
@@ -69,7 +69,7 @@ def main():
         logger.error(f"Failed to load image {input_path}")
         return
 
-    adv_image = apply_cwl2_with_upsized_delta(
+    adv_image = apply_cw_with_upsized_delta(
         image, 
         confidence=args.conf, 
         max_iter=args.iters, 
