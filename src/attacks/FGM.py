@@ -1,6 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import Optional, List
 import cv2
 import numpy as np
 from art.attacks.evasion import FastGradientMethod
@@ -18,6 +19,7 @@ def apply_fgm_with_upsized_delta(
     """
     Generates an adversarial delta at 224x224 using targeted FGM,
     upsizes that delta, and applies it to the original image to preserve detail.
+    Uses INTER_CUBIC for high-resolution stability.
     """
     logger.info(f"Applying FGM (Targeted) to force class {target_label} with epsilon {epsilon}")
 
@@ -43,14 +45,13 @@ def apply_fgm_with_upsized_delta(
     delta_small = x_adv_small - x_small
     delta_small_0 = delta_small[0]
 
-    # Upsize delta to match original resolution
-    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-
-    # Add the upscaled delta to the original float
-    x_orig_adv = x_orig_float + delta_big
-    x_orig_adv = np.clip(x_orig_adv, 0.0, 1.0) * 255.0
+    # Upsize delta to match original resolution using CUBIC for smoother transitions
+    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
     
-    return x_orig_adv.astype(np.uint8)
+    # Precise blending with explicit dtype handling to prevent corner artifacts
+    x_orig_adv = np.clip(x_orig_float + delta_big.astype(np.float32), 0.0, 1.0)
+    
+    return (x_orig_adv * 255.0).astype(np.uint8)
 
 def main():
     parser = argparse.ArgumentParser(description="Apply FGM Adversarial Attack to an image.")

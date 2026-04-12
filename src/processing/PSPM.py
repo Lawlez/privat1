@@ -69,7 +69,7 @@ def apply_pixel_pattern_mask(image: np.ndarray, pattern_size: int = 4, opacity: 
             
     return masked_image.astype(np.uint8)
 
-def apply_random_perspective_transform(image: np.ndarray, margin: float = 0.05) -> np.ndarray:
+def apply_random_perspective_transform(image: np.ndarray, margin: float = 0.02) -> np.ndarray:
     """Random perspective warp to shift corners and break bounding-box detection."""
     logger.info("Applying Random Perspective Transform.")
     h, w = image.shape[:2]

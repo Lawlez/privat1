@@ -1,6 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import Optional, List
 import cv2
 import numpy as np
 from art.attacks.evasion import ProjectedGradientDescent
@@ -20,6 +21,7 @@ def apply_pgd_with_upsized_delta(
     """
     Generates an adversarial delta at 224x224 using targeted PGD,
     upsizes that delta, and applies it to the original image.
+    Uses INTER_CUBIC for high-resolution stability.
     """
     logger.info(f"Applying PGD (Targeted) to force class {target_label} with eps {epsilon}")
 
@@ -46,12 +48,13 @@ def apply_pgd_with_upsized_delta(
     )
     x_adv_small = attack.generate(x=x_small, y=y_target)
 
-    # Delta scaling
+    # Delta scaling with higher-order interpolation for high-res stability
     delta_small = x_adv_small - x_small
-    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-
-    x_orig_adv = x_orig_float + delta_big
-    return (np.clip(x_orig_adv, 0.0, 1.0) * 255.0).astype(np.uint8)
+    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    
+    # Safe merge with floating point precision
+    x_orig_adv = np.clip(x_orig_float + delta_big.astype(np.float32), 0.0, 1.0)
+    return (x_orig_adv * 255.0).astype(np.uint8)
 
 def main():
     parser = argparse.ArgumentParser(description="Apply PGD Adversarial Attack to an image.")

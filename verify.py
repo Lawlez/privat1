@@ -2,16 +2,20 @@ import argparse
 import logging
 import os
 from pathlib import Path
+from typing import Optional, List
 import cv2
 import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub
-import pkg_resources  # Use the shim in root
-from helpers import create_tf_hub_classifier, ensure_labels
+import warnings
+# Suppress cosmetic warnings from ART regarding missing optional frameworks (PyTorch)
+warnings.filterwarnings("ignore", category=UserWarning, module="art.estimators.certification")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-logger = logging.getLogger(__name__)
+import pkg_resources  # Use the shim in root
+from helpers import create_tf_hub_classifier, ensure_labels, setup_logger
+
+# Configure premium colored logging
+logger = setup_logger(__name__)
 
 class Classifier:
     def __init__(self):
