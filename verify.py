@@ -1,86 +1,101 @@
+import argparse
+import logging
 import os
+from pathlib import Path
 import cv2
 import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub
+import pkg_resources  # Use the shim in root
+from helpers import create_tf_hub_classifier, ensure_labels
 
-# Load ImageNet labels
-LABELS_URL = "https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt"
-LABELS_FILE = "imagenet_labels.txt"
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-if not os.path.exists(LABELS_FILE):
-    print("Downloading ImageNet labels...")
-    import requests
-    response = requests.get(LABELS_URL)
-    with open(LABELS_FILE, "w") as f:
-        f.write(response.text)
+class Classifier:
+    def __init__(self):
+        self.labels = ensure_labels()
+        self.classifier = create_tf_hub_classifier()
+        self.model = self.classifier.model
 
-with open(LABELS_FILE, "r") as f:
-    labels = [line.strip() for line in f.readlines()]
+    def classify(self, image_path: Path, forbidden_classes: list) -> Optional[dict]:
+        image = cv2.imread(str(image_path))
+        if image is None:
+            logger.warning(f"Failed to load image: {image_path}")
+            return None
+        
+        img_resized = cv2.resize(image, (224, 224))
+        img_normalized = img_resized.astype(np.float32) / 255.0
+        img_expanded = np.expand_dims(img_normalized, axis=0)
 
-print("Loading MobileNetV2 model...")
-model = hub.load("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5")
+        predictions = self.model(img_expanded).numpy()
+        top_indices = np.argsort(predictions[0])[-10:][::-1]
+        detected_labels = [(self.labels[idx], idx, predictions[0][idx]) for idx in top_indices]
 
-def classify_image(image_path, forbidden_classes):
-    """
-    Classifies an image and returns a dict with the image path,
-    detected labels, and the highest confidence.
-    """
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"⚠️ Failed to load image: {image_path}")
-        return None
+        logger.info(f"\n🖼️ Image: {image_path.name}")
+        for name, idx, prob in detected_labels:
+            logger.info(f"  - {name} (ID {idx}) -> Confidence: {prob:.4f}")
+
+        detected_names = {name.lower() for name, _, _ in detected_labels}
+        forbidden_names = {cls.lower() for cls in forbidden_classes}
+        
+        is_forbidden = bool(detected_names & forbidden_names)
+        if is_forbidden:
+            logger.info("❌ Forbidden object detected!")
+        else:
+            logger.info("✅ Success: No forbidden objects detected.")
+
+        return {
+            "image_path": image_path,
+            "detected_labels": detected_labels,
+            "top_confidence": detected_labels[0][2] if detected_labels else 0.0,
+            "is_forbidden": is_forbidden
+        }
+
+def process_directory(directory_path: str, forbidden_classes: list):
+    dir_path = Path(directory_path)
+    if not dir_path.exists():
+        logger.error(f"Directory {directory_path} does not exist!")
+        return
+
+    image_extensions = {".jpg", ".png", ".jpeg", ".bmp", ".tiff"}
+    image_files = [f for f in dir_path.iterdir() if f.suffix.lower() in image_extensions]
     
-    img_resized = cv2.resize(image, (224, 224))
-    img_normalized = img_resized.astype(np.float32) / 255.0
-    img_expanded = np.expand_dims(img_normalized, axis=0)
-
-    predictions = model(img_expanded).numpy()
-    top_indices = np.argsort(predictions[0])[-10:][::-1]
-    detected_labels = [(labels[idx], idx, predictions[0][idx]) for idx in top_indices]
-
-    print(f"\n🖼️ Image: {image_path}")
-    for name, idx, prob in detected_labels:
-        print(f"  - {name} (ID {idx}) -> Confidence: {prob:.4f}")
-
-    detected_names = {name.lower() for name, _, _ in detected_labels}
-    forbidden_names = {cls.lower() for cls in forbidden_classes}
-    if detected_names & forbidden_names:
-        print("❌ Forbidden object detected!")
-    else:
-        print("✅ Success: No forbidden objects detected.")
-
-    top_confidence = detected_labels[0][2] if detected_labels else 0.0
-    return {"image_path": image_path, "detected_labels": detected_labels, "top_confidence": top_confidence}
-
-def process_directory(directory_path, forbidden_classes):
-    """
-    Processes all images in the given directory, sorts them by highest
-    confidence (across all predictions), and prints the sorted list.
-    """
-    if not os.path.exists(directory_path):
-        print("⚠️ Directory does not exist!")
-        return
-
-    image_files = [f for f in os.listdir(directory_path) if f.lower().endswith((".jpg", ".png", ".jpeg"))]
     if not image_files:
-        print("⚠️ No valid image files found in the directory!")
+        logger.warning(f"No valid image files found in {directory_path}")
         return
 
-    print(f"\n📂 Processing {len(image_files)} images in '{directory_path}'...\n")
+    logger.info(f"Processing {len(image_files)} images in '{directory_path}'...")
+    
+    classifier = Classifier()
     results = []
-    for image_file in image_files:
-        result = classify_image(os.path.join(directory_path, image_file), forbidden_classes)
-        if result is not None:
+    for img_file in image_files:
+        result = classifier.classify(img_file, forbidden_classes)
+        if result:
             results.append(result)
     
     sorted_results = sorted(results, key=lambda x: x["top_confidence"], reverse=True)
     
-    print("\n🔍 Sorted results by highest confidence:")
+    logger.info("\n🔍 Summary (Sorted by Confidence):")
     for res in sorted_results:
-        print(f"Image: {res['image_path']} | Top Confidence: {res['top_confidence']:.4f}")
+        status = "❌" if res["is_forbidden"] else "✅"
+        logger.info(f"{status} {res['image_path'].name} | Top: {res['top_confidence']:.4f}")
 
-IMAGE_DIRECTORY = "converted/testing/x"
-FORBIDDEN_CLASSES = ["keeshond"]
+def main():
+    parser = argparse.ArgumentParser(description="Classify images and check for forbidden objects.")
+    parser.add_argument("path", type=str, help="Path to image file or directory")
+    parser.add_argument("--forbidden", type=str, default="keeshond", help="Comma-separated forbidden classes")
+    
+    args = parser.parse_args()
+    forbidden_list = [c.strip() for c in args.forbidden.split(",")]
+    
+    path = Path(args.path)
+    if path.is_dir():
+        process_directory(args.path, forbidden_list)
+    else:
+        classifier = Classifier()
+        classifier.classify(path, forbidden_list)
 
-process_directory(IMAGE_DIRECTORY, FORBIDDEN_CLASSES)
+if __name__ == "__main__":
+    main()
