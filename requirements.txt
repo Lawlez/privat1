@@ -1,8 +1,9 @@
 adversarial-robustness-toolbox==1.19.1
 matplotlib==3.9.4
-numpy==1.26.4
+numpy>=1.26.0,<1.27.0
 opencv-python==4.11.0.86
 pillow==11.1.0
+requests==2.32.3
 tensorflow==2.16.2
 tensorflow-hub==0.16.1
 tensorflow-io-gcs-filesystem==0.37.1

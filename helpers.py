@@ -1,38 +1,64 @@
+import logging
+from typing import Tuple, Optional
 import tensorflow as tf
 import tensorflow_hub as hub
 from tensorflow.keras import losses
 from art.estimators.classification import TensorFlowV2Classifier
 
-def create_tf_hub_classifier():
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+# Global cache for the model to avoid redundant loads
+_MODEL_CACHE = {}
+
+def create_tf_hub_classifier(
+    handle: str = "https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5",
+    input_shape: Tuple[int, int, int] = (224, 224, 3)
+) -> TensorFlowV2Classifier:
     """
-    Loads a MobileNetV2 classification model (ImageNet) directly as a SavedModel,
-    wraps it in a custom tf.keras.Model subclass, then wraps *that* in ART.
+    Loads a classification model from TensorFlow Hub, wraps it in a Keras Model, 
+    and initializes an ART classifier.
+    
+    Optimized for macOS with tensorflow-metal if available.
     """
-    # Load the MobileNetV2 model from TensorFlow Hub
-    base_model = hub.load("https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/5")
+    if handle in _MODEL_CACHE:
+        logger.debug(f"Using cached model for {handle}")
+        return _MODEL_CACHE[handle]
+
+    logger.info(f"Loading model from {handle}...")
     
-    # Define a Keras Model that wraps the TF Hub model
-    class HubModel(tf.keras.Model):
-        def call(self, inputs):
-            return base_model(inputs)  # Output: (batch_size, num_classes)
+    try:
+        # Load the base model
+        base_model = hub.load(handle)
+        
+        # Define a Keras Model wrapper
+        class HubModel(tf.keras.Model):
+            def call(self, inputs):
+                return base_model(inputs)
 
-    model = HubModel()
+        model = HubModel()
 
-    # Determine number of output classes dynamically
-    dummy_input = tf.random.uniform((1, 224, 224, 3), minval=0.0, maxval=1.0)
-    output = model(dummy_input)
-    num_classes = output.shape[-1]  # Should be 1000 or 1001
+        # Determine number of output classes dynamically
+        dummy_input = tf.random.uniform((1, *input_shape), minval=0.0, maxval=1.0)
+        output = model(dummy_input)
+        num_classes = output.shape[-1]
 
-    # Use categorical cross-entropy for multi-class classification
-    loss_fn = losses.CategoricalCrossentropy(from_logits=False)
+        # Categorical cross-entropy for ImageNet-style models
+        loss_fn = losses.CategoricalCrossentropy(from_logits=False)
 
-    # Wrap in an ART classifier
-    art_classifier = TensorFlowV2Classifier(
-        model=model,
-        nb_classes=num_classes,  # Dynamically determined
-        input_shape=(224, 224, 3),
-        loss_object=loss_fn,
-        clip_values=(0.0, 1.0)  # VERY IMPORTANT for PGD attacks
-    )
-    
-    return art_classifier
+        # Wrap in an ART classifier
+        art_classifier = TensorFlowV2Classifier(
+            model=model,
+            nb_classes=num_classes,
+            input_shape=input_shape,
+            loss_object=loss_fn,
+            clip_values=(0.0, 1.0)
+        )
+        
+        _MODEL_CACHE[handle] = art_classifier
+        return art_classifier
+
+    except Exception as e:
+        logger.error(f"Failed to load model from {handle}: {e}")
+        raise
