@@ -38,14 +38,18 @@ class Classifier:
         top_indices = np.argsort(predictions[0])[-10:][::-1]
         detected_labels = [(self.labels[idx], idx, predictions[0][idx]) for idx in top_indices]
 
+        # Detailed logging per image
         logger.info(f"\n🖼️ Image: {image_path.name}")
-        for name, idx, prob in detected_labels:
-            logger.info(f"  - {name} (ID {idx}) -> Confidence: {prob:.4f}")
+        for i, (name, idx, prob) in enumerate(detected_labels):
+            logger.info(f"  [{i+1}] {name} (ID {idx}) -> Confidence: {prob:.4f}")
 
-        detected_names = {name.lower() for name, _, _ in detected_labels}
-        forbidden_names = {cls.lower() for cls in forbidden_classes}
-        
-        is_forbidden = bool(detected_names & forbidden_names)
+        forbidden_names = {cls.strip().lower() for cls in forbidden_classes}
+        matches = []
+        for i, (name, idx, prob) in enumerate(detected_labels):
+            if name.lower() in forbidden_names:
+                matches.append({"name": name, "rank": i + 1, "prob": prob})
+
+        is_forbidden = len(matches) > 0
         if is_forbidden:
             logger.info("❌ Forbidden object detected!")
         else:
@@ -53,9 +57,10 @@ class Classifier:
 
         return {
             "image_path": image_path,
-            "detected_labels": detected_labels,
+            "top_label": detected_labels[0][0] if detected_labels else "Unknown",
             "top_confidence": detected_labels[0][2] if detected_labels else 0.0,
-            "is_forbidden": is_forbidden
+            "is_forbidden": is_forbidden,
+            "matches": matches
         }
 
 def process_directory(directory_path: str, forbidden_classes: list):
@@ -85,7 +90,13 @@ def process_directory(directory_path: str, forbidden_classes: list):
     logger.info("\n🔍 Summary (Sorted by Confidence):")
     for res in sorted_results:
         status = "❌" if res["is_forbidden"] else "✅"
-        logger.info(f"{status} {res['image_path'].name} | Top: {res['top_confidence']:.4f}")
+        msg = f"{status} {res['image_path'].name} | {res['top_label']} ({res['top_confidence']:.4f})"
+        
+        if res["is_forbidden"]:
+            match_details = ", ".join([f"{m['name']} at #{m['rank']}" for m in res["matches"]])
+            msg += f" | FORBIDDEN: {match_details}"
+            
+        logger.info(msg)
 
 def main():
     parser = argparse.ArgumentParser(description="Classify images and check for forbidden objects.")
