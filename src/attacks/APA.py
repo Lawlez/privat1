@@ -15,7 +15,8 @@ def apply_apa_with_upsized_delta(
     original_image: np.ndarray, 
     scale: float = 0.3, 
     target_label: int = 865,
-    iters: int = 40
+    iters: int = 40,
+    alpha: float = 0.8
 ) -> np.ndarray:
     """
     Applies a Native TensorFlow Adversarial Patch to the image to force a target class.
@@ -83,9 +84,9 @@ def apply_apa_with_upsized_delta(
     # Slight blur over the upscaled patch to bleed it neatly into the shot
     delta_big = cv2.GaussianBlur(delta_big, (3, 3), 0)
     
-    # Blend with native image 
+    # Blend with native image using alpha for subtlety
     x_orig_float = original_image.astype(np.float32) / 255.0
-    x_orig_adv = np.clip(x_orig_float + delta_big.astype(np.float32), 0.0, 1.0)
+    x_orig_adv = np.clip(x_orig_float + (delta_big.astype(np.float32) * alpha), 0.0, 1.0)
     
     return (x_orig_adv * 255.0).astype(np.uint8)
 

@@ -14,7 +14,8 @@ def apply_cw_with_upsized_delta(
     original_image: np.ndarray, 
     confidence: float = 1.0, 
     max_iter: int = 10, 
-    target_label: int = 262
+    target_label: int = 865,
+    alpha: float = 0.6
 ) -> np.ndarray:
     """
     Applies Carlini & Wagner L2 attack with upscaled delta.
@@ -42,11 +43,15 @@ def apply_cw_with_upsized_delta(
     )
     x_adv_small = attack.generate(x=x_small, y=y_target)
 
-    # Compute delta and upscale
+    # Compute delta and upscale softly
     delta_small = x_adv_small - x_small
-    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    
+    # Smooth the noise to reduce visible artifacts
+    delta_big = cv2.GaussianBlur(delta_big, (3, 3), 0)
 
-    x_orig_adv = np.clip(x_orig_float + delta_big, 0, 1)
+    # Blend with original image using alpha for subtlety
+    x_orig_adv = np.clip(x_orig_float + (delta_big * alpha), 0.0, 1.0)
     return (x_orig_adv * 255.0).astype(np.uint8)
 
 def main():

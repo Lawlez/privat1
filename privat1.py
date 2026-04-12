@@ -91,7 +91,8 @@ def apply_adversarial_step(
     attack_type: str = "pgd", 
     eps: float = 0.05, 
     iters: int = 15,
-    target_label: int = 865
+    target_label: int = 865,
+    **kwargs
 ) -> np.ndarray:
     """
     Dispatcher for modular adversarial attacks.
@@ -100,10 +101,10 @@ def apply_adversarial_step(
     try:
         if attack_type == "pgd":
             from src.attacks.PGD import apply_pgd_with_upsized_delta
-            return apply_pgd_with_upsized_delta(image, epsilon=eps, max_iter=iters, target_label=target_label)
+            return apply_pgd_with_upsized_delta(image, epsilon=eps, max_iter=iters, target_label=target_label, alpha=kwargs.get('alpha', 0.6))
         elif attack_type == "fgm":
             from src.attacks.FGM import apply_fgm_with_upsized_delta
-            return apply_fgm_with_upsized_delta(image, epsilon=eps, target_label=target_label)
+            return apply_fgm_with_upsized_delta(image, epsilon=eps, target_label=target_label, alpha=kwargs.get('alpha', 0.6))
         elif attack_type == "apa":
             from src.attacks.APA import apply_apa_with_upsized_delta
             return apply_apa_with_upsized_delta(image, target_label=target_label)
@@ -112,7 +113,7 @@ def apply_adversarial_step(
             return apply_staa_with_upsized_delta(image, target_label=target_label)
         elif attack_type == "carlini_wagner" or attack_type == "cw":
             from src.attacks.carlini_wagner import apply_cw_with_upsized_delta
-            return apply_cw_with_upsized_delta(image, target_label=target_label)
+            return apply_cw_with_upsized_delta(image, max_iter=iters, target_label=target_label, alpha=kwargs.get('alpha', 0.6))
         elif attack_type == "opa":
             from src.attacks.OPA import apply_opa_with_upsized_delta
             return apply_opa_with_upsized_delta(image, target_label=target_label)
@@ -157,7 +158,8 @@ def protect_image(input_path: Path, output_dir: Path, args: argparse.Namespace, 
                  attack_type=attack_name, 
                  eps=eps_to_use, 
                  iters=40, 
-                 target_label=args.target
+                 target_label=args.target,
+                 alpha=args.alpha
             )
 
     # 3. Assets/Distractors
@@ -208,6 +210,7 @@ def main():
     parser.add_argument("--mask-opacity", type=float, default=0.2, help="Pattern mask opacity")
     parser.add_argument("--workers", type=int, default=6, help="Number of parallel workers")
     parser.add_argument("--attacks", type=str, default="pgd,fgm", help="Comma-separated attacks to run (e.g. pgd,fgm,apa,staa)")
+    parser.add_argument("--alpha", type=float, default=0.6, help="Adversarial noise blending alpha (0.0 to 1.0)")
     parser.add_argument("--target", type=int, default=865, help="Target class ID for targeted attacks")
     parser.add_argument("--assets", type=str, help="Optional path to training/distractor images")
     parser.add_argument("--no-adv", action="store_true", help="Disable adversarial attacks")

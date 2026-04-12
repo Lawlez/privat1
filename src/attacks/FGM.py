@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 def apply_fgm_with_upsized_delta(
     original_image: np.ndarray, 
     epsilon: float = 0.06, 
-    target_label: int = 865
+    target_label: int = 865,
+    alpha: float = 0.6
 ) -> np.ndarray:
     """
     Generates an adversarial delta at 224x224 using targeted FGM,
@@ -54,8 +55,8 @@ def apply_fgm_with_upsized_delta(
     # Slight blur to fully blend sharp boundaries
     delta_big = cv2.GaussianBlur(delta_big, (3, 3), 0)
     
-    # Precise blending with explicit dtype handling to prevent corner artifacts
-    x_orig_adv = np.clip(x_orig_float + delta_big.astype(np.float32), 0.0, 1.0)
+    # Blend with original image using alpha for subtlety
+    x_orig_adv = np.clip(x_orig_float + (delta_big.astype(np.float32) * alpha), 0.0, 1.0)
     
     return (x_orig_adv * 255.0).astype(np.uint8)
 
