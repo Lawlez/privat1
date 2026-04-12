@@ -14,7 +14,7 @@ from OPA import apply_opa_with_upsized_delta
 
 def load_image(image_path):
     """Loads image via OpenCV."""
-    image = cv2.imread(image_path)
+    image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
     if image is None:
         raise FileNotFoundError(f"Image at path {image_path} not found.")
     return image
@@ -74,7 +74,7 @@ def apply_noise(image, noise_level=20):
 def apply_pixelation(image, pixel_size=4):
     print("Applying Pixelation.")
     height, width = image.shape[:2]
-    temp = cv2.resize(image, (width // pixel_size, height // pixel_size), interpolation=cv2.INTER_LINEAR)
+    temp = cv2.resize(image, (width // pixel_size, height // pixel_size), interpolation=cv2.INTER_LINEAR_EXACT)
     return cv2.resize(temp, (width, height), interpolation=cv2.INTER_NEAREST)
 
 def apply_compression(image, quality=75):
@@ -186,23 +186,23 @@ def protect_image(image_path, output_path):
     print(f"Loaded image from {image_path}")
 
     # Distort the image in multiple ways
-    image = apply_blur(image, kernel_size=(3, 3))
-    image = apply_pixel_shift(image, shift_amount=6)
-    image = apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.3)
-    image = apply_random_perspective_transform(image)
+    #image = apply_blur(image, kernel_size=(3, 3))
+    image = apply_pixel_shift(image, shift_amount=5)
+    #image = apply_pixel_pattern_mask(image, pattern_size=4, opacity=0.3)
+    #image = apply_random_perspective_transform(image)
     image = apply_noise(image, noise_level=20)
-    image = apply_pixelation(image, pixel_size=3)
-    image = apply_compression(image, quality=80)
+    #image = apply_pixelation(image, pixel_size=3)
+    image = apply_compression(image, quality=85)
 
     # Multi-step adversarial approach (now all TensorFlow-based)
-    image = apply_opa_with_upsized_delta(image, th=15, es=20)
-    image = apply_fgm_with_upsized_delta(image, epsilon=0.08, eps_steps=0.01, target_label=0)
-    image = apply_pgd_with_upsized_delta(image, eps=0.09, eps_step=0.01, max_iter=1, target_label=224)
-    image = apply_cwl2_with_upsized_delta(image, confidence=3.0, max_iter=15, target_label=384)
+    image = apply_opa_with_upsized_delta(image, th=2, es=15)
+    #image = apply_fgm_with_upsized_delta(image, epsilon=0.01, eps_steps=0.01, target_label=52)
+    #image = apply_pgd_with_upsized_delta(image, eps=0.02, eps_step=0.01, max_iter=2, target_label=52)
+    image = apply_cwl2_with_upsized_delta(image, confidence=3.0, max_iter=15, target_label=52)
     
 
     # Optionally embed random assets
-    image = embed_resized_images(image, "./assets")
+    #image = embed_resized_images(image, "./assets")
 
     # Add dummy metadata and stego keywords
     keywords = ["ducks", "sea", "rubber ducky", "flying in space", "unicorn", "quantum banana"]
@@ -223,7 +223,7 @@ def protect_image(image_path, output_path):
     # Save final obfuscated image
     _, ext = os.path.splitext(image_path)
     ext = ext[1:] 
-    output_file_name = f'x2_{generate_random_name(ext)}'
+    output_file_name = f'x4x2_{generate_random_name(ext)}'
     output_file_path = os.path.join(output_path, output_file_name)
     cv2.imwrite(output_file_path, image)
     print(f"Protected image saved to {output_file_path}")
@@ -236,7 +236,7 @@ def protect_image(image_path, output_path):
 
 if __name__ == "__main__":
     input_folder = "images/" 
-    output_folder = "converted/testing"
+    output_folder = "converted/testing/77"
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -251,4 +251,4 @@ if __name__ == "__main__":
             meta_removed_path = os.path.join(
                 output_folder, f"no_metadata_{os.path.basename(protected_image_path)}"
             )
-            remove_metadata(protected_image_path, meta_removed_path)
+            #remove_metadata(protected_image_path, meta_removed_path)

@@ -15,7 +15,7 @@ def apply_cwl2_with_upsized_delta(original_image, confidence=1.0, max_iter=20, t
     x_orig_float = original_image.astype(np.float32) / 255.0
 
     # 2) Downsize to 224×224
-    small_img = cv2.resize(original_image, (224, 224), interpolation=cv2.INTER_LINEAR)
+    small_img = cv2.resize(original_image, (224, 224), interpolation=cv2.INTER_LINEAR_EXACT)
     x_small = small_img.astype(np.float32)[None] / 255.0  # shape (1,224,224,3)
     
     num_classes = 1001  # ImageNet has 1001 classes
@@ -37,7 +37,7 @@ def apply_cwl2_with_upsized_delta(original_image, confidence=1.0, max_iter=20, t
 
     # 5) Upsize the delta
     delta_small_0 = delta_small[0]
-    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+    delta_big = cv2.resize(delta_small_0, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR_EXACT)
 
     # 6) Apply the delta to the original float
     x_orig_adv = x_orig_float + delta_big

@@ -54,7 +54,7 @@ def apply_opa_with_upsized_delta(original_image, th=5, es=50, apply_pgd=False):
 
     # Compute delta and upscale
     delta_small = x_adv_small - x_small
-    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
 
     # Apply adversarial perturbation
     x_orig_adv = np.clip(x_orig_float + delta_big, 0, 1)

@@ -38,7 +38,7 @@ def apply_pgd_with_upsized_delta(original_image, eps=0.06, eps_step=0.01, max_it
 
     # upsize delta to original shape
     delta_small = x_adv_small - x_small  # shape (1,224,224,3)
-    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+    delta_big = cv2.resize(delta_small[0], (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     delta_big = np.clip(delta_big, -eps, eps)
     x_orig_adv = np.clip(x_orig_float + delta_big, 0, 1)
     x_orig_adv = (x_orig_adv * 255.0).astype(np.uint8)
