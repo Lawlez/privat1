@@ -13,3 +13,7 @@ converted/.DS_Store
 output_with_metadata.png
 /src/__pycache__
 /converted/testing
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md
+/images
